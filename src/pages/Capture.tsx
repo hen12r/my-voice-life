@@ -136,7 +136,7 @@ export default function Capture() {
             <Textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} aria-label={t('capture.transcript')} />
             {result?.language === 'rw' && <p className="mt-2 text-xs text-amber-700">{t('capture.rwExperimental')}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" disabled={!transcript.trim() || transcript === result?.transcript || phase === 'saving'}
+              <Button variant="secondary" size="sm" disabled={!transcript.trim() || transcript === result?.transcript || phase === 'saving' || aiBlocked}
                 onClick={() => run(() => processText(transcript, timezone, result?.language ?? hint))}>{t('capture.reprocess')}</Button>
               <Button variant="ghost" size="sm" disabled={!transcript.trim() || phase === 'saving'} onClick={saveTranscriptAsNote}>{t('capture.saveAsNote')}</Button>
             </div>

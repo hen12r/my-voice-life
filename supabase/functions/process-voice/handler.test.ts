@@ -111,11 +111,17 @@ function textRequest(text = 'Tomorrow I need to call my school') {
 const code = async (r: Response) => ((await r.json()) as { error?: { code: string } }).error?.code;
 
 // ---------- tests ----------
-Deno.test('no API key: refuses before doing anything', async () => {
+Deno.test('no API key: signed-in user gets ai_not_configured, no provider or accounting calls', async () => {
   const s = setup({ key: undefined });
   const r = await s.handler(voiceRequest());
   assertEq(r.status, 503, 'status'); assertEq(await code(r), 'ai_not_configured', 'code');
   assertEq(s.f.calls.length, 0, 'no provider calls'); assertEq(s.a.calls.length, 0, 'no accounting calls');
+});
+
+Deno.test('unauthenticated without a key configured: still 401 (configuration not revealed)', async () => {
+  const s = setup({ user: makeUser(false), key: undefined });
+  const r = await s.handler(textRequest());
+  assertEq(r.status, 401, 'status');
 });
 
 Deno.test('unauthenticated: 401, no provider or accounting calls', async () => {

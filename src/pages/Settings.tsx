@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
@@ -57,7 +57,9 @@ export default function Settings() {
   const premium = sub?.plan === 'premium' && (sub.status === 'active' || sub.status === 'trialing');
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageHeader title={t('settings.title')} subtitle={session?.user.email} />
+      <PageHeader title={t('settings.title')} subtitle={session?.user.email} action={usage?.is_admin
+        ? <Link to="/app/admin"><Button variant="secondary" icon={<ShieldCheck className="size-4" />}>{t('nav.admin')}</Button></Link>
+        : undefined} />
 
       <Card>
         <CardHeader title={t('settings.profile')} />

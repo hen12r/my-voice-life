@@ -121,11 +121,11 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
   return async function handler(req: Request): Promise<Response> {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
     if (req.method !== 'POST') return fail(req, 405, 'method_not_allowed', 'POST only');
-    if (!deps.geminiApiKey) return fail(req, 503, 'ai_not_configured', 'GEMINI_API_KEY secret is not set on this project');
-
     const supabase = deps.userClient(req);
     const { data: userData, error: authError } = await supabase.auth.getUser();
     if (authError || !userData?.user) return fail(req, 401, 'unauthorized', 'Sign in required');
+    // Checked after authentication so anonymous callers learn nothing about configuration.
+    if (!deps.geminiApiKey) return fail(req, 503, 'ai_not_configured', 'GEMINI_API_KEY secret is not set on this project');
     const userId = userData.user.id;
     const admin = deps.adminClient();
 
