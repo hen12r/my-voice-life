@@ -14,6 +14,7 @@ import Tasks from './pages/Tasks';
 import Schedule from './pages/Schedule';
 import Memory from './pages/Memory';
 import Settings from './pages/Settings';
+import Admin from './pages/Admin';
 import type { UiLanguage } from './lib/types';
 
 function browserLanguage(): UiLanguage {
@@ -67,6 +68,7 @@ export default function App() {
               <Route path="schedule" element={<Schedule />} />
               <Route path="memory" element={<Memory />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="admin" element={<Admin />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

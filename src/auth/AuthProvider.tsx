@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { getProfile } from '../lib/api';
-import type { Profile } from '../lib/types';
+import { getMyUsage, getProfile, touchActivity } from '../lib/api';
+import type { MyUsage, Profile } from '../lib/types';
 import { browserTimeZone } from '../lib/dates';
 
 interface AuthValue {
@@ -12,6 +12,9 @@ interface AuthValue {
   /** Set when the user arrived through a password-recovery link. */
   recovering: boolean;
   refreshProfile: () => Promise<void>;
+  /** Server-counted AI allowance; null until loaded or if unavailable. */
+  usage: MyUsage | null;
+  refreshUsage: () => Promise<void>;
   setProfile: (p: Profile) => void;
   signOut: () => Promise<void>;
 }
@@ -23,8 +26,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [recovering, setRecovering] = useState(false);
+  const [usage, setUsage] = useState<MyUsage | null>(null);
+
+  const refreshUsage = useCallback(async () => {
+    try { setUsage(await getMyUsage()); } catch (e) { console.error('Could not load usage', e); }
+  }, []);
 
   const loadProfile = useCallback(async () => {
+    void touchActivity().catch(() => undefined); // monthly-active-user marker (one row per day)
+    void refreshUsage();
     try {
       const p = await getProfile();
       // First sign-in: adopt the device time zone instead of the UTC default.
@@ -38,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Could not load profile', e);
       setProfile(null);
     }
-  }, []);
+  }, [refreshUsage]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -53,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       if (event === 'PASSWORD_RECOVERY') setRecovering(true);
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') void loadProfile();
-      if (event === 'SIGNED_OUT') { setProfile(null); setRecovering(false); }
+      if (event === 'SIGNED_OUT') { setProfile(null); setRecovering(false); setUsage(null); }
     });
     return () => { active = false; sub.subscription.unsubscribe(); };
   }, [loadProfile]);
@@ -61,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthValue = {
     session, profile, loading, recovering,
     refreshProfile: loadProfile,
+    usage,
+    refreshUsage,
     setProfile,
     signOut: async () => { await supabase.auth.signOut(); },
   };

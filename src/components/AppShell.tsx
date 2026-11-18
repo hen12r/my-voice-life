@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Brain, CalendarClock, CheckSquare, Home, LogOut, Mic, NotebookPen, Settings } from 'lucide-react';
+import { Brain, CalendarClock, CheckSquare, Home, LogOut, Mic, NotebookPen, Settings, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import { cx } from './ui';
@@ -23,7 +23,9 @@ export function Logo({ light }: { light?: boolean }) {
 
 export function AppShell() {
   const { t } = useI18n();
-  const { signOut } = useAuth();
+  const { signOut, usage } = useAuth();
+  // Shown only to admins; every admin RPC is also authorised on the server.
+  const nav = usage?.is_admin ? [...NAV, { to: '/app/admin', key: 'nav.admin' as TranslationKey, icon: ShieldCheck }] : NAV;
   const navigate = useNavigate();
 
   return (
@@ -35,7 +37,7 @@ export function AppShell() {
           <Mic className="size-4" aria-hidden /> {t('nav.capture')}
         </NavLink>
         <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label="Main">
-          {NAV.map(({ to, key, icon: Icon }) => (
+          {nav.map(({ to, key, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === '/app'}
               className={({ isActive }) => cx('flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                 isActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white')}>

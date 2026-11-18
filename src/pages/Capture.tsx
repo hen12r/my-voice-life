@@ -7,7 +7,7 @@ import { commitItems, createNote, DEFAULT_REMINDER_TIME, listCategories, process
 import { ITEM_TYPES, type ItemType } from '../../supabase/functions/_shared/extraction.ts';
 import type { Category } from '../lib/types';
 import { browserTimeZone } from '../lib/dates';
-import { formatDuration, MAX_RECORDING_MS, useRecorder, type Recording } from '../voice/useRecorder';
+import { DEFAULT_MAX_RECORDING_MS, formatDuration, useRecorder, type Recording } from '../voice/useRecorder';
 import { Alert, Badge, Button, Card, cx, Field, Input, PageHeader, Select, Textarea } from '../components/ui';
 
 type Phase = 'input' | 'processing' | 'review' | 'saving' | 'done';
@@ -16,9 +16,13 @@ const LANG_LABEL: Record<string, string> = { en: 'English', fr: 'Français', rw:
 
 export default function Capture() {
   const { t } = useI18n();
-  const { profile } = useAuth();
+  const { profile, usage, refreshUsage } = useAuth();
   const [params] = useSearchParams();
-  const recorder = useRecorder();
+  const maxMs = usage ? usage.max_capture_seconds * 1000 : DEFAULT_MAX_RECORDING_MS;
+  const recorder = useRecorder(maxMs);
+  // Server-counted allowance. The server enforces it regardless; this only explains the state.
+  const limitReached = !!usage && (usage.captures_used >= usage.captures_limit || usage.minutes_used >= usage.minutes_limit);
+  const aiBlocked = !!usage && (!usage.ai_available || limitReached);
   const [phase, setPhase] = useState<Phase>('input');
   const [typed, setTyped] = useState('');
   const [showTyping, setShowTyping] = useState(params.get('mode') === 'text');
@@ -52,6 +56,7 @@ export default function Capture() {
     setError(null);
     setPhase('processing');
     try { adopt(await fn()); } catch (e) { setError(errorMessage(t, e)); setPhase(result ? 'review' : 'input'); }
+    finally { void refreshUsage(); }
   };
 
   const handleRecording = (rec: Recording | null) => { if (rec) void run(() => processAudio(rec.blob, rec.durationMs, timezone, hint)); };
@@ -160,13 +165,26 @@ export default function Capture() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t('capture.title')} subtitle={t('capture.subtitle')} />
+      {usage && <AllowanceBar usage={usage} />}
+      {usage && !usage.ai_available && (
+        <div className="mb-4"><Alert kind="info">
+          {usage.ai_paused_message || t(usage.ai_mode === 'off' ? 'errors.ai_paused' : 'errors.ai_test_mode')}{' '}
+          <Link to="/app/notes" className="font-medium underline">{t('usage.writeInstead')}</Link>
+        </Alert></div>
+      )}
+      {usage && usage.ai_available && limitReached && (
+        <div className="mb-4"><Alert kind="info">
+          {t(usage.captures_used >= usage.captures_limit ? 'errors.quota_captures' : 'errors.quota_minutes')}{' '}
+          <Link to="/app/notes" className="font-medium underline">{t('usage.writeInstead')}</Link>
+        </Alert></div>
+      )}
       <Card className="flex flex-col items-center px-6 py-10">
         <div className="relative flex size-40 items-center justify-center">
           {recording && <span className="animate-pulse-ring absolute inset-4 rounded-full bg-accent-400" aria-hidden />}
           {recording && <span className="absolute inset-2 rounded-full bg-accent-100 transition-transform duration-75" style={{ transform: `scale(${0.85 + recorder.level * 0.25})` }} aria-hidden />}
           <button
             onClick={() => (recording ? recorder.stop().then(handleRecording) : startRecording())}
-            disabled={processing || recorder.state === 'requesting'}
+            disabled={processing || recorder.state === 'requesting' || (aiBlocked && !recording)}
             aria-label={recording ? t('capture.stop') : t('capture.start')}
             className={cx('relative flex size-28 items-center justify-center rounded-full text-white shadow-xl transition-colors disabled:opacity-60',
               recording ? 'bg-accent-600 hover:bg-accent-700' : 'bg-navy-900 hover:bg-navy-800')}>
@@ -175,7 +193,7 @@ export default function Capture() {
         </div>
 
         <div className="mt-4 h-6 text-sm" aria-live="polite">
-          {recording && <span className="font-medium tabular-nums text-accent-700">● {t('capture.recording')} {formatDuration(recorder.elapsedMs)} / {formatDuration(MAX_RECORDING_MS)}</span>}
+          {recording && <span className="font-medium tabular-nums text-accent-700">● {t('capture.recording')} {formatDuration(recorder.elapsedMs)} / {formatDuration(maxMs)}</span>}
           {processing && <span className="text-muted">{t('capture.processing')}</span>}
           {!recording && !processing && <span className="text-muted">{t('capture.start')}</span>}
         </div>
@@ -203,7 +221,7 @@ export default function Capture() {
           <Card className="p-5">
             <Textarea value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t('capture.typePlaceholder')} rows={4} maxLength={10000} aria-label={t('capture.typeInstead')} autoFocus />
             <div className="mt-3 flex justify-end">
-              <Button disabled={!typed.trim() || processing || recording} loading={processing} onClick={() => run(() => processText(typed, timezone, hint))}>{t('capture.process')}</Button>
+              <Button disabled={!typed.trim() || processing || recording || aiBlocked} loading={processing} onClick={() => run(() => processText(typed, timezone, hint))}>{t('capture.process')}</Button>
             </div>
           </Card>
         )}
@@ -268,5 +286,25 @@ function ReviewCard({ item, categories, error, blocked, onChange }: {
         </button>
       </div>
     </Card>
+  );
+}
+
+function AllowanceBar({ usage }: { usage: import('../lib/types').MyUsage }) {
+  const { t, locale } = useI18n();
+  const capturesLeft = Math.max(0, usage.captures_limit - usage.captures_used);
+  const minutesLeft = Math.max(0, Math.floor((usage.minutes_limit - usage.minutes_used) * 10) / 10);
+  const pct = Math.min(100, (usage.captures_used / usage.captures_limit) * 100);
+  return (
+    <div className="mb-4 rounded-2xl border border-line bg-white px-4 py-3 text-sm" aria-live="polite">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span><strong className="tabular-nums">{capturesLeft}</strong> / {usage.captures_limit} {t('usage.capturesLeft')}</span>
+        <span className="text-xs text-muted">
+          <span className="tabular-nums">{minutesLeft}</span> {t('usage.minutesLeft')} · {t('usage.resets')} {new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(new Date(usage.resets_at))}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-canvas" role="progressbar" aria-valuemin={0} aria-valuemax={usage.captures_limit} aria-valuenow={usage.captures_used}>
+        <div className={cx('h-full rounded-full', pct >= 100 ? 'bg-amber-500' : 'bg-accent-500')} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }

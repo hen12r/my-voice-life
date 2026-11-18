@@ -1,6 +1,6 @@
 import { functionsUrl, supabase } from './supabase';
 import type { ProposedItem } from '../../supabase/functions/_shared/extraction.ts';
-import type { CalendarEvent, Category, MemoryHit, Note, Profile, Reminder, Subscription, Task, Usage } from './types';
+import type { AdminFinanceSummary, AdminUsageSummary, CalendarEvent, Category, MemoryHit, MyUsage, Note, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
 import { zonedTimeToUtc } from './dates';
 
 export class ApiError extends Error {
@@ -27,11 +27,35 @@ export const updateProfile = async (id: string, patch: Partial<Omit<Profile, 'id
 export const getSubscription = async (): Promise<Subscription | null> =>
   checkMaybe(await supabase.from('subscriptions').select('plan, status, billing_interval, current_period_end').maybeSingle());
 
-export const getCurrentUsage = async (): Promise<Usage | null> => {
-  const now = new Date();
-  const period = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
-  return checkMaybe(await supabase.from('usage_counters').select('period_start, notes_created, voice_sessions').eq('period_start', period).maybeSingle());
-};
+/** The caller's own AI allowance, counted on the server (never in the browser). */
+export const getMyUsage = async (): Promise<MyUsage | null> => checkMaybe(await supabase.rpc('mvl_my_usage')) as MyUsage | null;
+
+/** Marks the user active today (one row per day) for honest monthly-active-user counts. */
+export const touchActivity = async (): Promise<void> => { await supabase.rpc('mvl_touch_activity'); };
+
+// ---------------- Admin (every RPC re-checks mvl_is_admin() on the server) ----------------
+export const getAdminUsage = async (month?: string): Promise<AdminUsageSummary> =>
+  check(await supabase.rpc('mvl_admin_usage_summary', { p_month: month ?? null })) as AdminUsageSummary;
+export const getAdminFinance = async (month?: string): Promise<AdminFinanceSummary> =>
+  check(await supabase.rpc('mvl_admin_finance_summary', { p_month: month ?? null })) as AdminFinanceSummary;
+export const adminUpdateSettings = async (p: {
+  ai_mode?: string; ai_paused_message?: string; daily_budget?: number; monthly_budget?: number;
+  fx_usd_to_eur?: number; vat_rate?: number; prices_include_vat?: boolean;
+}) => checkMaybe(await supabase.rpc('mvl_admin_update_settings', {
+  p_ai_mode: p.ai_mode ?? null, p_ai_paused_message: p.ai_paused_message ?? null,
+  p_daily_budget: p.daily_budget ?? null, p_monthly_budget: p.monthly_budget ?? null,
+  p_fx_usd_to_eur: p.fx_usd_to_eur ?? null, p_vat_rate: p.vat_rate ?? null, p_prices_include_vat: p.prices_include_vat ?? null,
+}));
+export const adminUpdatePlanLimits = async (l: PlanLimits) => checkMaybe(await supabase.rpc('mvl_admin_update_plan_limits', {
+  p_plan: l.plan, p_captures: l.ai_captures_per_month, p_minutes: l.audio_minutes_per_month,
+  p_max_seconds: l.max_capture_seconds, p_per_hour: l.captures_per_hour, p_per_day: l.captures_per_day,
+}));
+export const adminAddExpense = async (e: { month: string; service: string; category: string; amount: number; currency: string; kind: string; note?: string }) =>
+  checkMaybe(await supabase.rpc('mvl_admin_add_expense', {
+    p_month: e.month, p_service: e.service, p_category: e.category, p_amount: e.amount, p_currency: e.currency, p_kind: e.kind, p_note: e.note ?? null,
+  }));
+export const adminDeleteExpense = async (id: number) => checkMaybe(await supabase.rpc('mvl_admin_delete_expense', { p_id: id }));
+export const adminAckAlert = async (id: number) => checkMaybe(await supabase.rpc('mvl_admin_ack_alert', { p_id: id }));
 
 // ---------------- Categories ----------------
 export const listCategories = async (): Promise<Category[]> =>
@@ -89,6 +113,7 @@ export interface ProcessResult {
   timezone: string;
   items: ProposedItem[];
   warnings: string[];
+  usage?: { plan: string; captures_used: number; captures_limit: number; minutes_used: number; minutes_limit: number };
 }
 
 async function callFunction<T>(name: string, body: BodyInit, json: boolean): Promise<T> {

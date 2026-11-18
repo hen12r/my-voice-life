@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopped' | 'error';
 export type RecorderError = 'denied' | 'no_device' | 'unsupported' | 'too_short' | 'failed';
 
-export const MAX_RECORDING_MS = 5 * 60 * 1000;
+/** Fallback only; the real limit comes from the user's plan (mvl_my_usage.max_capture_seconds). */
+export const DEFAULT_MAX_RECORDING_MS = 2 * 60 * 1000;
 const MIN_RECORDING_MS = 700;
 
 function pickMimeType(): string | undefined {
@@ -18,7 +19,9 @@ export interface Recording { blob: Blob; durationMs: number }
  * Microphone recorder. Audio stays in memory; nothing is persisted on the device.
  * `stop()` resolves with the recording, `cancel()` discards it.
  */
-export function useRecorder() {
+export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
+  const maxMsRef = useRef(maxMs);
+  maxMsRef.current = maxMs;
   const [state, setState] = useState<RecorderState>('idle');
   const [error, setError] = useState<RecorderError | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -98,7 +101,7 @@ export function useRecorder() {
         setLevel(Math.min(1, peak / 64));
         const elapsed = Date.now() - startRef.current;
         setElapsedMs(elapsed);
-        if (elapsed >= MAX_RECORDING_MS && recorder.state === 'recording') { setHitLimit(true); recorder.stop(); return; }
+        if (elapsed >= maxMsRef.current && recorder.state === 'recording') { setHitLimit(true); recorder.stop(); return; }
         timerRef.current = requestAnimationFrame(tick);
       };
       timerRef.current = requestAnimationFrame(tick);
