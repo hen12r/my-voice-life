@@ -1,32 +1,26 @@
 # Deploying My Voice Life
 
-Nothing here touches Photosentry. Its Vercel project (`photosentry`) and Supabase project (`photosentry`, `zgvftpdnqszkyyyognrv`) stay exactly as they are.
+This repository, **`hen12r/my-voice-life`**, contains only My Voice Life.
 
-## What exists today (verified)
+## Where things live
 | Thing | State |
 |---|---|
-| GitHub repo `hen12r/-hen12r` | holds **three** apps: FitPick on `main`, **Photosentry** on `claude/amazing-tesla-jorf1p` (in `web/`), **My Voice Life** on `claude/wonderful-gauss-4zwbs1` (PR #3) |
-| Vercel `photosentry` | correctly linked to this repo; Root Directory `web`; production deploys come from `claude/amazing-tesla-jorf1p`. It also tries to build every other branch, and those builds fail harmlessly ("web does not exist") |
-| Vercel project for My Voice Life | **does not exist yet** |
-| Supabase `hen12r's Project` (`ognlcllsttlyariioyjx`, eu-west-1) | **paused**; holds the old FitPick schema |
-| Supabase `photosentry` | active; belongs to Photosentry. **Do not use it for My Voice Life** |
+| GitHub `hen12r/my-voice-life` (this repo) | My Voice Life only. `main` starts at the original "Initial commit" (README only). The app arrives on `main` only when the owner merges the migration PR |
+| Origin of this code | migrated with full history from `hen12r/-hen12r` (branch `claude/wonderful-gauss-4zwbs1`, PR #3). Commit IDs are identical. The two oldest commits are the shared starting point with FitPick |
+| GitHub `hen12r/-hen12r` | **not ours to change**: hosts FitPick (`main`) and **Photosentry** (`claude/amazing-tesla-jorf1p`, `web/`). Never push My Voice Life work there |
+| Vercel `photosentry` | Photosentry's project, linked to `hen12r/-hen12r`. **Never modify it** |
+| Supabase `photosentry` (`zgvftpdnqszkyyyognrv`) | Photosentry's database. **Never use it for My Voice Life** |
+| Supabase `hen12r's Project` (`ognlcllsttlyariioyjx`) | paused; holds the old FitPick schema |
+| Vercel project for My Voice Life | to be created in Step 1 |
 
-## Step 0: decide where the code lives (recommended: its own repo)
-**Option A (recommended): a separate GitHub repo `my-voice-life`.** One repo per product means each Vercel project builds only its own app, `main` means one thing, and nothing fails on the other app's pushes.
-1. On GitHub create an **empty** repository `my-voice-life` (no README, no license).
-2. Tell me its name. I'll attach it and push this branch as its `main`, with your explicit go-ahead, because that publishes code to a new repo.
-3. Then do Step 1 with that repo. Photosentry and this repo stay untouched.
-
-**Option B: keep using `hen12r/-hen12r`.** Works, with two caveats:
-- Vercel's production branch defaults to `main` (FitPick). Until PR #3 is merged (with your approval), production deploys of `my-voice-life` would build FitPick. Set the production branch as described in Step 1.6.
-- Each Vercel project will try to build the other app's branches. Add the "Ignored Build Step" in Step 1.7 so `my-voice-life` skips non-My-Voice-Life branches.
+> Why a separate repo: Vercel builds every branch of a connected repository, and its Ignored Build Step runs *inside* the project's Root Directory. Photosentry's Root Directory (`web`) doesn't exist on My Voice Life branches, so no ignore rule could stop those failing builds without changing Photosentry's production settings. One product per repository removes the problem entirely.
 
 ## Step 1: create the Vercel project (manual)
-1. Go to **vercel.com/new** (team **henry7**) → **Import Git Repository** → choose the repo (A: `my-voice-life`, B: `hen12r/-hen12r`). Importing the same repo a second time is allowed and doesn't change `photosentry`.
+1. Go to **vercel.com/new** (team **henry7**) → **Import Git Repository** → **`hen12r/my-voice-life`**.
 2. **Project Name:** `my-voice-life`
 3. **Framework Preset:** Vite
-4. **Root Directory:** leave as `./` (repository root). **Not `web`.**
-5. **Build & Output settings:** leave on default. `vercel.json` in the repo pins them: install `npm ci`, build `npm run build`, output `dist`, Node 22.x (from `package.json` `engines`).
+4. **Root Directory:** leave as `./` (repository root).
+5. **Build & Output settings:** leave on default. `vercel.json` pins them: install `npm ci`, build `npm run build`, output `dist`, Node 22.x (from `package.json` `engines`).
 6. **Environment Variables:** add exactly two, for **Production and Preview** (and Development if you use `vercel dev`):
    | Name | Value (from **your My Voice Life** Supabase project → Project Settings → API) |
    |---|---|
@@ -34,17 +28,11 @@ Nothing here touches Photosentry. Its Vercel project (`photosentry`) and Supabas
    | `VITE_SUPABASE_PUBLISHABLE_KEY` | the **Publishable** key (starts with `sb_publishable_`) |
 
    - **Don't copy them from the `photosentry` Vercel project.** Those point to Photosentry's database.
-   - **Never** add `VITE_GEMINI_API_KEY`, a secret key (`sb_secret_…`) or a `service_role` key. The build now **refuses to run** if it finds one (`scripts/env-guard.mjs`).
-7. Click **Deploy**. With option B, this first deploy builds `main` = FitPick. That's expected; ignore it. Then:
-   - **Settings → Git → Production Branch:** keep `main`, and deploy My Voice Life to production only after PR #3 is merged (with your approval). Until then, use the PR's **preview** deployment.
-   - **Settings → Git → Ignored Build Step** (option B only), command:
-     ```
-     test -f src/main.tsx -a -f vercel.json && exit 1 || exit 0
-     ```
-     (Vercel builds on exit 1 and skips on exit 0, so only branches containing My Voice Life are built.)
-8. Optionally, to stop `photosentry` reporting failed builds on My Voice Life branches, add `test -d web && exit 1 || exit 0` as Photosentry's Ignored Build Step. This only skips branches without `web/` and doesn't change Photosentry's own deploys. **Your call.** I haven't touched Photosentry.
+   - **Never** add `VITE_GEMINI_API_KEY`, a secret key (`sb_secret_…`) or a `service_role` key. The build **refuses to run** if it finds one (`scripts/env-guard.mjs`).
+7. Click **Deploy**. The first deployment builds `main`, which still holds only the initial README, so **it is expected to fail or be empty**. That's harmless and doesn't reach users.
+8. **Settings → Git → Production Branch:** keep `main`. Production gets My Voice Life only after the owner merges the migration PR. Until then, test with that PR's **Preview** deployment (Vercel comments its URL on the PR).
 
-Note: Vercel preview deployments in your team are behind Vercel Authentication (as on `photosentry`), so testers need to be logged in to Vercel, or you disable preview protection for this project.
+Note: preview deployments in the `henry7` team are behind Vercel Authentication, so testers must be logged in to Vercel, or you disable preview protection for this project.
 
 ## Step 2: Supabase project (manual; decision needed)
 **Option 1 (recommended): create a fresh project `my-voice-life`.**

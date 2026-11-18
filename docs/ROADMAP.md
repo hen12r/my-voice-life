@@ -31,8 +31,8 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Kinyarwanda test kit (plan, prompts, sheet, transcribe + WER/CER scorer) | ✅ tooling / ⬜ results | 8 metric/CSV tests; dry-run and scoring verified on synthetic data. **No Kinyarwanda results exist yet** |
 
 ### Blocked on owner action (see docs/DEPLOYMENT.md)
-1. Decide: own repo for My Voice Life (recommended) or keep sharing `hen12r/-hen12r` with Photosentry.
-2. Create the `my-voice-life` Vercel project (Root Directory `.`), never reusing Photosentry's env vars.
+1. ~~Decide where the code lives~~: done, moved to the dedicated repo `hen12r/my-voice-life` with full history.
+2. Create the `my-voice-life` Vercel project from `hen12r/my-voice-life` (Root Directory `.`), never reusing Photosentry's env vars.
 3. Create a fresh Supabase project (recommended) or restore the paused one; run the read-only pre-flight; approve the migration.
 4. Set `GEMINI_API_KEY` + `ALLOWED_ORIGINS` as Supabase Function Secrets; **rotate the old key** if FitPick was ever deployed.
 5. Record Kinyarwanda clips with written consent (docs/kinyarwanda/TEST_PLAN.md).

@@ -25,8 +25,8 @@ Tagline: *Your voice. Your ideas. Your organised life.*
 6. **Audio is never stored.** It is processed in memory by the Edge Function. Transcripts are stored (they are the memory).
 7. **No fake features.** No decorative buttons, no fake AI output, no claims of support that are untested (Kinyarwanda is "experimental" until tested with real speakers).
 8. Migrations are additive/idempotent SQL files in `supabase/migrations/`. Applying to the real project requires the owner's explicit approval.
-9. Do not merge to `main` or deploy without the owner's approval.
-10. **This repo also hosts Photosentry** (branch `claude/amazing-tesla-jorf1p`, `web/`, Vercel project `photosentry`, Supabase project `photosentry`). Never modify those branches, that Vercel project or that Supabase project from My Voice Life work.
+9. Do not merge to `main` or deploy without the owner's approval. `main` is the production branch; work happens on feature branches with draft PRs.
+10. **This repository (`hen12r/my-voice-life`) contains only My Voice Life.** It was migrated with full history from `hen12r/-hen12r` (PR #3), which also hosts FitPick and **Photosentry** (branch `claude/amazing-tesla-jorf1p`, Vercel project `photosentry`, Supabase project `photosentry`). Never push My Voice Life work to `hen12r/-hen12r`, and never modify Photosentry's branches, Vercel project or Supabase project.
 11. New SQL objects get collision-proof names (`mvl_` prefix or similar) — never `create or replace` a function/trigger name a legacy schema might already use.
 
 ## Layout
