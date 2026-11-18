@@ -16,7 +16,7 @@ Supabase
 
 ## The voice-to-action pipeline
 1. `useRecorder` captures Opus/WebM (or MP4 on Safari) in memory, max 5 min, with level meter, cancel and permission-error handling.
-2. `process-voice` authenticates the caller, rate-limits (30/hour), and checks size and type.
+2. `process-voice` authenticates the caller, checks size and type, measures the exact audio length with Gemini's free `countTokens`, then **reserves** the capture in the database (`mvl_reserve_ai_capture`: allowance, rate limits, budgets, kill switch, test mode). Nothing paid happens without a reservation. See `docs/FINANCIAL_CONTROL_ARCHITECTURE.md`.
 3. **Transcription**: Gemini audio input, prompt = verbatim, no translation; returns `{transcript, language}`.
 4. **Extraction**: a second Gemini call with `responseSchema` and today's date and weekday *in the user's time zone*. The prompt forbids invention and requires `date_confidence`.
 5. **Validation** (`_shared/extraction.ts`, unit-tested): drops unknown types, bounds lengths, rejects impossible dates, **clears non-explicit dates**, flags reminders/events with no date, maps categories to ones the user owns.
@@ -36,7 +36,9 @@ Two calls instead of one: the user can edit the transcript and re-run only the e
 | reminders | remind_at (UTC) + timezone + recurrence | partial index ready for a delivery worker |
 | events | starts_at/ends_at, all_day, location | |
 | subscriptions | plan/status/Stripe ids | service-role write only |
-| usage_counters | monthly monotonic counters | deleting a note does not refund quota |
+| usage_counters | legacy (no longer written) | superseded by `mvl_ai_usage` |
+| mvl_ai_usage | append-only AI ledger, one row per capture, no content | written only by service-role RPCs; users can't delete it, so deleting notes never refunds the allowance |
+| mvl_plan_limits / mvl_app_settings / mvl_price_book | configurable limits, budgets, kill switch, AI prices | admin RPCs only |
 
 Cross-user references are impossible: child tables use composite FKs `(category_id, user_id) → categories(id, user_id)`.
 

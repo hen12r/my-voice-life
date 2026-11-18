@@ -1,4 +1,8 @@
-# Migration review: `20261118000001_my_voice_life_core.sql`
+# Migration review
+
+Two migrations, applied in order. **Neither has been applied to any remote database.** Both wait for the owner's explicit approval.
+
+# 1. `20261118000001_my_voice_life_core.sql`
 
 **Status: prepared, tested locally, NOT applied anywhere remote. Waiting for the owner's approval.**
 
@@ -95,3 +99,41 @@
 
 ## How it will be applied (only after your explicit "approved")
 I apply it with the Supabase migration tool, so it's recorded in the project's migration history. Then I immediately run the Supabase security advisor and `npm run check:env`, and report the results. If anything fails, the transaction rolls back and the database stays as it was.
+
+
+# 2. `20261118000002_mvl_financial_controls.sql`
+
+**Status: prepared and tested locally; NOT applied.** Approved design: `docs/FINANCIAL_CONTROL_ARCHITECTURE.md`.
+
+## Summary for the decision
+| Question | Answer |
+|---|---|
+| Does it delete data? | **No.** No table, column or row is dropped. It removes one trigger and two functions (logic only, see below) |
+| Behaviour changes | **1. Approved:** the "7 saved notes/month" rule is removed (trigger `notes_enforce_quota`, functions `enforce_note_quota()` and `plan_limits(text)`), so manual notes become unlimited. **2.** AI requests now require a reservation (allowance, rate limits, budgets, kill switch, test mode) |
+| Existing tables touched | none altered. `usage_counters` is kept with its rows but is no longer written |
+| New tables (all RLS on) | `mvl_app_settings` (one row), `mvl_staff`, `mvl_plan_limits`, `mvl_plan_prices`, `mvl_fee_schedules`, `mvl_price_book`, `mvl_ai_usage`, `mvl_budget_alerts`, `mvl_operating_expenses`, `mvl_daily_activity` |
+| Seed data | settings (AI `admins_only`, $2/day, $20/month, fx 0.90, VAT 0); limits free 7 captures / 15 min / 120 s / 5 per hour / 7 per day, premium 300 / 600 / 300 s / 30 / 60; prices €4.99/month and €39.99/year; Stripe fee schedules (EEA, international); Gemini 2.5 Flash and Flash-Lite prices with source URL and date |
+| Personal data | `mvl_ai_usage` stores **no content** (no audio, transcript or note text), only counts, tokens and estimated cost. On account deletion its `user_id` becomes NULL (an anonymised cost record); `mvl_daily_activity` rows are deleted |
+| Atomic and re-runnable | yes (tested with `--single-transaction`, applied twice) |
+
+## Security model
+| Table | Users | Admins | Edge Function |
+|---|---|---|---|
+| `mvl_ai_usage` | **read own rows only**; no insert, update or delete, so deleting notes or sessions can never restore an allowance | aggregates via RPC (pseudonymous 8-character hashes) | writes only through `mvl_reserve_ai_capture`, `mvl_record_ai_call`, `mvl_finish_ai_capture` (granted to `service_role` only) |
+| `mvl_plan_limits`, `mvl_plan_prices` | read | update limits via RPC; cannot set 0 or NULL (no unlimited plans) | read inside reserve |
+| settings, staff, price book, fees, alerts, expenses, activity | **no access** | via SECURITY DEFINER RPCs that check `mvl_is_admin()` | — |
+- `anon` has no access to anything new.
+- Every new function has `search_path = ''`, and execute is revoked from public, anon and authenticated before being granted precisely.
+- **The staff list is managed only in the SQL editor**: there's no UI to grant admin rights, which reduces the attack surface.
+
+## Concurrency and "never exceed the budget"
+- `mvl_reserve_ai_capture` locks the settings row (`FOR UPDATE`), so reservations are processed one at a time.
+- Each reservation holds the **worst-case cost**: exact audio length + maximum text input + 2 × the output cap (the Edge Function sets `maxOutputTokens` and turns thinking off). The final cost is corrected from Gemini's real token counts.
+- Abandoned reservations expire after 15 minutes and keep their worst-case cost.
+- **Tested:** two sessions racing for the last free capture, and for the last bit of budget: exactly one wins each time. The test was confirmed to fail when the lock is removed.
+
+## Evidence
+`npm run test:db`: **130 checks pass**: 31 core RLS/isolation checks (the note-quota checks were replaced by an unlimited-notes check), 79 financial-control checks, 3 concurrency checks, 15 legacy-upgrade checks and 2 guard checks.
+
+## Rollback (if ever needed, after approval)
+Drop the `mvl_*` functions and tables, and re-create the note-quota trigger from migration 1. No user content is involved. I'll prepare it as a separate file if you ask.

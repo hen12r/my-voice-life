@@ -1,6 +1,6 @@
 # Cost control plan
 
-Status: **proposal + audit.** No paid plan, billing account or paid API has been enabled. Nothing in this document is active until the owner approves it.
+Status: **audit approved; controls implemented locally (2026-11-18), not yet applied to any live database.** No paid plan, billing account or paid API has been enabled. Section 5 shows the implementation status.
 Prices were checked on the providers' own pricing pages on **2026-11-18**. They change, so re-check before relying on them. USD prices are shown as published; where a € figure appears it assumes **$1 ≈ €0.90**, so replace it with the real rate.
 
 ## 1. Services, plans and charges
@@ -69,18 +69,20 @@ The fixed €0.25 makes small monthly payments relatively expensive, so the annu
 | Protection | Status today | Proposal |
 |---|---|---|
 | API keys server-side only | ✅ Gemini key only in Supabase secrets; build refuses `VITE_*` secrets | keep |
-| Per-user hourly rate limit | ⚠️ exists (30/hour) but **bypassable** (counts user-deletable rows; failed calls not counted) | ledger-based limit in a table users can't write (architecture doc) |
-| Monthly AI cap per plan | ❌ **none** | free 7 captures; premium fair-use cap (e.g. 300 captures / 600 audio minutes); enforced in the database before the Gemini call |
+| Per-user hourly rate limit | ✅ **fixed locally**: counted from the ledger users can't modify; failed calls count | — |
+| Monthly AI cap per plan | ✅ implemented locally: free 7 captures; premium 300 captures **and** 600 min, enforced independently before any Gemini call | — |
 | Max recording length | 5 min (client) + 12 MB (server) | per plan: free 2 min, premium 5 min, checked server-side by file size |
-| Global daily/monthly AI budget | ❌ none | stops AI calls when the estimated spend reaches the budget |
-| Kill switch for AI features | ❌ none | one setting turns AI off instantly; manual notes and tasks keep working |
-| "Test users only" mode | ❌ none | while on the free Gemini tier, only admin/test accounts may use AI (protects real users' data) |
-| Thinking tokens | ❌ not set | set thinking budget to 0 for both calls; measure quality |
-| Usage and cost recording | ❌ none | per-call ledger with real token counts from Gemini's response |
-| Admin usage and finance dashboard | ❌ none | aggregates only, never users' note content |
+| Global daily/monthly AI budget | ✅ implemented locally ($2/day, $20/month hard stops) | stops AI calls when the estimated spend reaches the budget |
+| Kill switch for AI features | ✅ implemented locally | one setting turns AI off instantly; manual notes and tasks keep working |
+| "Test users only" mode | ✅ implemented locally (default) | while on the free Gemini tier, only admin/test accounts may use AI (protects real users' data) |
+| Thinking tokens | ✅ disabled by default (setting) | set thinking budget to 0 for both calls; measure quality |
+| Usage and cost recording | ✅ implemented locally | per-call ledger with real token counts from Gemini's response |
+| Admin usage and finance dashboard | ✅ implemented locally | aggregates only, never users' note content |
 | Sign-up abuse | email confirmation | add free CAPTCHA (Supabase supports Turnstile/hCaptcha) before public launch |
 
 ## 6. Provider-side safety nets (manual; free to configure; your action)
+
+Step-by-step instructions: **`docs/GOOGLE_CLOUD_SAFETY.md`**.
 These work even if our code has a bug:
 1. **Google Cloud (when the Gemini key is created):**
    - Billing → **Budgets & alerts**: a monthly budget (for example $10) with emails at 50% / 90% / 100%. Budgets only *alert*; they don't stop spending.

@@ -1,6 +1,6 @@
 # Financial control architecture (PROPOSAL)
 
-**Status: proposal for owner review. Not implemented, not migrated, nothing applied.** It extends the existing schema additively, following the same rules as the core migration: owner-only RLS, service-role-only writes for money and usage data, collision-proof names, tested before review.
+**Status: approved 2026-11-18 and implemented locally** in `supabase/migrations/20261118000002_mvl_financial_controls.sql`, `supabase/functions/process-voice`, `src/pages/Admin.tsx`. **Not applied to any live database.** The SQL sketch below is the design; the migration file is authoritative (it adds `mvl_staff` with admin/tester roles, worst-case cost holds and reservation expiry). It extends the existing schema additively, following the same rules as the core migration: owner-only RLS, service-role-only writes for money and usage data, collision-proof names, tested before review.
 
 ## Goals → design
 | Requirement | Design |

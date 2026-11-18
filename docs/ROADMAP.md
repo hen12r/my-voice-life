@@ -12,7 +12,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Migration safe on a FitPick-style project (no data loss, no clobbered functions, sign-up still works) | ✅ | 15 checks in `legacy_upgrade_test.sql` on a **simulated** FitPick schema; re-check against the real schema via pre-flight output |
 | Migration aborts atomically on an unknown conflicting table | ✅ | guard scenario in `npm run test:db` |
 | Read-only pre-flight inspection script | ✅ | runs on simulated schema; write attempts rejected in read-only transaction |
-| Free-plan note quota enforced server-side, not refundable by deleting | ✅ | DB tests |
+| ~~Free-plan note quota~~ replaced by the AI-capture allowance (manual notes unlimited) | ✅ | see financial controls below |
 | New-user bootstrap (profile, 7 default categories, free plan) | ✅ | DB tests |
 | Keyword memory search (RLS-safe RPC) | ✅ | DB tests (incl. no cross-user leakage) |
 | Extraction validator (no invented dates, bounded output) | ✅ | 11 unit tests |
@@ -29,6 +29,21 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | `npm run check:env` (masked env validation + Supabase probes) | 🟡 | written; probes need a live project |
 | CORS allow-list with Vercel preview patterns | ✅ | 5 unit tests; `deno check` passes |
 | Kinyarwanda test kit (plan, prompts, sheet, transcribe + WER/CER scorer) | ✅ tooling / ⬜ results | 8 metric/CSV tests; dry-run and scoring verified on synthetic data. **No Kinyarwanda results exist yet** |
+
+### Financial controls (approved 2026-11-18; local only, not applied)
+| Item | Status | Evidence |
+|---|---|---|
+| Migration `20261118000002_mvl_financial_controls.sql` (ledger, limits, budgets, kill switch, admin RPCs) | ✅ prepared + tested locally / ⬜ not applied | 82 new DB checks; whole suite 130 checks |
+| Free 7 AI captures/month; manual notes unlimited; deleting records never restores allowance | ✅ | DB tests |
+| Premium 300 captures **and** 600 audio minutes, enforced independently; configurable without code | ✅ | DB tests |
+| Per-hour/per-day rate limits counted from the ledger (not user-deletable rows) | ✅ | DB tests |
+| $2/day and $20/month hard budgets with worst-case holds; alerts at 50/80/100%; admin webhook | ✅ DB / 🟡 webhook | DB tests; webhook needs a live deployment |
+| Concurrency: simultaneous requests can't bypass limits or budgets | ✅ | two-session race tests; confirmed to fail when the lock is removed |
+| Kill switch + `admins_only` test mode (default) | ✅ | DB tests |
+| `process-voice` reservation flow, real token recording, thinking off, output cap | 🟡 | `deno check` + 7 unit tests; **not yet run against real Gemini/Supabase** |
+| Admin dashboard (usage, controls, limits, finance with labels, expenses) | 🟡 | render-tested with mocked data under the real CSP; needs a live DB |
+| Allowance display + refusal messages in the app | 🟡 | render-tested with mocked data |
+| Actual AI cost of premium allowance measured from real usage | ⬜ | required before commercial launch |
 
 ### Blocked on owner action (see docs/DEPLOYMENT.md)
 1. ~~Decide where the code lives~~: done, moved to the dedicated repo `hen12r/my-voice-life` with full history.
@@ -60,6 +75,8 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 2. Speak: "Tomorrow I need to call my school, prepare my CV, buy a notebook and practise piano." Expect 4 tasks dated tomorrow, each editable. Save and check them in Tasks and the dashboard.
 3. Speak: "Remind me to call mum this weekend." Expect a reminder flagged "choose a date" and Save disabled until you pick one.
 4. Deny microphone permission → a clear message is shown and typing still works.
-5. Create 7 notes → the 8th is refused with the plan-limit message. Delete one → still refused.
+5. As a free test user (staff/tester while in `admins_only` mode), make 7 AI captures → the 8th is refused with the monthly-limit message and "Write a note instead". Delete notes or sessions → still refused. Manual notes still save.
+5b. Admin → AI controls → Off → capture refused with the paused message; switch back on.
+5c. Admin → set the daily budget just above today's spend → new captures stop with the budget message; an alert appears and the webhook (if set) fires.
 6. Second account in a private window: none of the first account's data is visible, including in Memory search.
 7. Settings → delete account → you're signed out, and logging in again fails.

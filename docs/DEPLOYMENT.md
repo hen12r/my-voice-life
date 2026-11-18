@@ -62,7 +62,7 @@ Note: preview deployments in the `henry7` team are behind Vercel Authentication,
    | `GEMINI_API_KEY` | your key |
    | `ALLOWED_ORIGINS` | `http://localhost:3000,https://my-voice-life.vercel.app,https://my-voice-life-*-henry7.vercel.app` |
    | `GEMINI_MODEL` (optional) | default `gemini-2.5-flash`. Check it's still offered in AI Studio |
-   | `VOICE_HOURLY_LIMIT` (optional) | default `30` |
+   | `ALERT_WEBHOOK_URL` (optional) | an incoming-webhook URL (Slack, Discord, …) for budget alerts; messages contain no user data |
 
    Never paste the key into chat, GitHub, `.env.local`, Vercel, or any `VITE_` variable. `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided to Edge Functions automatically; don't set them.
 4. Deploy the functions, either yourself:
@@ -73,6 +73,14 @@ Note: preview deployments in the `henry7` team are behind Vercel Authentication,
    npx supabase functions deploy delete-account --project-ref <project-ref>
    ```
    or tell me "deploy the functions" and I'll do it with the Supabase tools.
+
+## Step 3b: make yourself admin (after your first sign-up)
+In Supabase → SQL Editor, replace the email with yours:
+```sql
+insert into public.mvl_staff (user_id, role)
+select id, 'admin' from auth.users where email = 'YOUR-EMAIL' on conflict (user_id) do update set role = 'admin';
+```
+Testers who may use AI during private testing get `role = 'tester'`. AI starts in **staff-only** mode, and the default budgets are $2/day and $20/month; change them in **Admin → AI controls**. Google-side caps and alerts: `docs/GOOGLE_CLOUD_SAFETY.md`.
 
 ## Step 4: final verification (together)
 When Steps 1–3 are done, I run and report each item with its evidence:
