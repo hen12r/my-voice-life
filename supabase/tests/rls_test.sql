@@ -94,24 +94,11 @@ select pg_temp.expect_error('select count(*) from public.notes', 'anon cannot re
 select pg_temp.expect_error($$select * from public.search_memory('solar')$$, 'anon cannot call search_memory');
 reset role;
 
--- ---------- Free plan quota ----------
+-- ---------- Manual notes are unlimited (approved change: the free limit applies to AI captures) ----------
 select pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000001');
-insert into public.notes (body) select 'note ' || g from generate_series(2, 7) g;
-select pg_temp.expect((select count(*) = 7 from public.notes), 'free user can save 7 notes');
-select pg_temp.expect_error($$insert into public.notes (body) values ('eighth')$$, '8th note blocked on free plan');
-delete from public.notes where body = 'note 7';
-select pg_temp.expect_error($$insert into public.notes (body) values ('after delete')$$, 'deleting a note does not restore quota');
-reset role;
-
-update public.subscriptions set plan = 'premium' where user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
-select pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000001');
-insert into public.notes (body) values ('premium note');
-select pg_temp.expect(true, 'premium user is not limited');
-reset role;
-
-update public.subscriptions set status = 'canceled' where user_id = 'aaaaaaaa-0000-0000-0000-000000000001';
-select pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000001');
-select pg_temp.expect_error($$insert into public.notes (body) values ('after cancel')$$, 'canceled subscription falls back to free limits');
+insert into public.notes (body) select 'manual note ' || g from generate_series(2, 21) g;
+select pg_temp.expect((select count(*) = 21 from public.notes), 'free user can save 21 manual notes (no note quota)');
+select pg_temp.expect((select count(*) = 0 from pg_trigger where tgname = 'notes_enforce_quota'), 'old notes quota trigger removed');
 reset role;
 
 -- ---------- Task completion bookkeeping ----------
