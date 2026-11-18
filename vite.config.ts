@@ -31,6 +31,7 @@ export default defineConfig(({ mode }) => ({
   server: { port: 3000, host: '0.0.0.0' },
   preview: { port: 4173, headers: vercelHeaders() },
   test: {
-    include: ['src/**/*.test.ts', 'supabase/functions/**/*.test.ts', 'scripts/**/*.test.ts'],
+    // Deno-only tests (supabase/functions/<fn>/*.test.ts) run with `npm run test:functions`.
+    include: ['src/**/*.test.ts', 'supabase/functions/_shared/**/*.test.ts', 'scripts/**/*.test.ts'],
   },
 }));

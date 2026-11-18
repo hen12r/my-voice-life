@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:db": "bash scripts/test-db.sh",
-    "check:env": "node scripts/check-env.mjs"
+    "check:env": "node scripts/check-env.mjs",
+    "test:functions": "deno test --allow-env supabase/functions/process-voice/ || npx -y deno@2.1.4 test --allow-env supabase/functions/process-voice/"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
