@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { AlertTriangle, Check, Keyboard, Mic, RotateCcw, Square, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarDays, Check, CheckSquare, Heart, Keyboard, Lightbulb, Mic, Pencil, RotateCcw, Square, StickyNote, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
 import { commitItems, createNote, DEFAULT_REMINDER_TIME, listCategories, processAudio, processText, type ProcessResult, type ReviewedItem } from '../lib/api';
@@ -10,6 +10,8 @@ import type { Category } from '../lib/types';
 import { browserTimeZone } from '../lib/dates';
 import { DEFAULT_MAX_RECORDING_MS, formatDuration, useRecorder, type Recording } from '../voice/useRecorder';
 import { Alert, Badge, Button, Card, cx, Field, Input, PageHeader, Select, Textarea } from '../components/ui';
+import { LiveWaveform, VoiceOrb, type OrbMode } from '../components/VoiceOrb';
+import { playCue } from '../lib/sound';
 
 type Phase = 'input' | 'processing' | 'review' | 'saving' | 'done';
 
@@ -32,6 +34,11 @@ export default function Capture() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [saveErrors, setSaveErrors] = useState<Record<number, string>>({});
   const [savedCount, setSavedCount] = useState(0);
+  // Genuine request stages: 'uploading' while bytes are being sent (real progress), then
+  // 'thinking' while the server transcribes and organises. The server returns one response,
+  // so these two are the stages the app can actually observe.
+  const [stage, setStage] = useState<'uploading' | 'thinking' | null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
 
   const timezone = profile?.timezone ?? browserTimeZone();
   // The user's spoken languages (Settings), sent as recognition hints; empty = automatic detection.
@@ -50,22 +57,35 @@ export default function Capture() {
     })));
     setSaveErrors({});
     setPhase('review');
+    playCue('ready');
   };
 
   const run = async (fn: () => Promise<ProcessResult>) => {
     setError(null);
     setPhase('processing');
-    try { adopt(await fn()); } catch (e) { setError(errorMessage(t, e)); setPhase(result ? 'review' : 'input'); }
-    finally { void refreshUsage(); }
+    try { adopt(await fn()); } catch (e) { setError(errorMessage(t, e)); setPhase(result ? 'review' : 'input'); playCue('error'); }
+    finally { setStage(null); void refreshUsage(); }
   };
 
-  const handleRecording = (rec: Recording | null) => { if (rec) void run(() => processAudio(rec.blob, rec.durationMs, timezone, languages)); };
+  const handleRecording = (rec: Recording | null) => {
+    if (!rec) return;
+    setUploadPct(0);
+    setStage('uploading');
+    void run(() => processAudio(rec.blob, rec.durationMs, timezone, languages, {
+      onUpload: (f) => setUploadPct(Math.round(f * 100)),
+      onUploaded: () => setStage('thinking'),
+    }));
+  };
 
   const startRecording = async () => {
     setError(null);
     await recorder.start();
     recorder.waitForAutoStop().then(handleRecording);
   };
+  const stopRecording = () => { playCue('stop'); void recorder.stop().then(handleRecording); };
+
+  // Cue only once the microphone is really live (after permission was granted).
+  useEffect(() => { if (recorder.state === 'recording') playCue('start'); }, [recorder.state]);
 
   const recorderError = useMemo(() => {
     const map: Record<string, TranslationKey> = { denied: 'capture.micDenied', no_device: 'capture.micMissing', unsupported: 'capture.micUnsupported', insecure: 'capture.micInsecure', busy: 'capture.micBusy', too_short: 'capture.tooShort', failed: 'errors.generic' };
@@ -86,6 +106,7 @@ export default function Capture() {
     outcomes.filter((o) => !o.ok).forEach((o) => { errs[o.index] = errorMessage(t, o.error); });
     const ok = outcomes.filter((o) => o.ok).length;
     setSavedCount((c) => c + ok);
+    if (ok > 0) playCue('saved');
     // Keep only failed items on screen so nothing is lost or double-saved.
     const failed = new Set(Object.keys(errs).map(Number));
     if (failed.size === 0) { setPhase('done'); return; }
@@ -111,7 +132,7 @@ export default function Capture() {
     return (
       <div className="mx-auto max-w-xl animate-fade-up">
         <Card className="p-8 text-center">
-          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check className="size-6" /></div>
+          <div className="animate-pop mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check className="size-6" /></div>
           <h1 className="text-lg font-semibold">{t('capture.saved')} · {savedCount}</h1>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button onClick={reset} icon={<Mic className="size-4" />}>{t('capture.startOver')}</Button>
@@ -147,11 +168,11 @@ export default function Capture() {
           <div className="space-y-3">
             {items.length === 0 && <Card className="p-6 text-sm text-muted">{t('capture.nothingFound')}</Card>}
             {items.map((it, idx) => (
-              <ReviewCard key={idx} item={it} categories={categories} error={saveErrors[idx]} blocked={blocked(it)} onChange={(p) => update(idx, p)} />
+              <ReviewCard key={idx} index={idx} item={it} categories={categories} error={saveErrors[idx]} blocked={blocked(it)} onChange={(p) => update(idx, p)} />
             ))}
             {items.length > 0 && (
               <div className="sticky bottom-20 flex items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 shadow-sm backdrop-blur lg:bottom-4">
-                <span className="text-sm text-muted">{selected.length} / {items.length}</span>
+                <span className="text-sm text-muted" aria-live="polite">{t('capture.keeping')} {selected.length} / {items.length}</span>
                 <Button onClick={save} disabled={!canSave} loading={phase === 'saving'} icon={<Check className="size-4" />}>{t('capture.saveSelected')}</Button>
               </div>
             )}
@@ -163,6 +184,8 @@ export default function Capture() {
 
   const recording = recorder.state === 'recording';
   const processing = phase === 'processing';
+  const orbMode: OrbMode = processing ? (stage === 'uploading' ? 'uploading' : 'thinking')
+    : recording ? 'recording' : recorder.state === 'requesting' ? 'requesting' : aiBlocked ? 'disabled' : 'idle';
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t('capture.title')} subtitle={t('capture.subtitle')} />
@@ -179,30 +202,32 @@ export default function Capture() {
           <Link to="/app/notes" className="font-medium underline">{t('usage.writeInstead')}</Link>
         </Alert></div>
       )}
-      <Card className="flex flex-col items-center px-6 py-10">
-        <div className="relative flex size-40 items-center justify-center">
-          {recording && <span className="animate-pulse-ring absolute inset-4 rounded-full bg-accent-400" aria-hidden />}
-          {recording && <span className="absolute inset-2 rounded-full bg-accent-100 transition-transform duration-75" style={{ transform: `scale(${0.85 + recorder.level * 0.25})` }} aria-hidden />}
-          <button
-            onClick={() => (recording ? recorder.stop().then(handleRecording) : startRecording())}
-            disabled={processing || recorder.state === 'requesting' || (aiBlocked && !recording)}
-            aria-label={recording ? t('capture.stop') : t('capture.start')}
-            className={cx('relative flex size-28 items-center justify-center rounded-full text-white shadow-xl transition-colors disabled:opacity-60',
-              recording ? 'bg-accent-600 hover:bg-accent-700' : 'bg-navy-900 hover:bg-navy-800')}>
-            {recording ? <Square className="size-9 fill-current" /> : <Mic className="size-11" />}
-          </button>
-        </div>
+      <Card className="flex flex-col items-center overflow-hidden px-6 pt-6 pb-8">
+        <VoiceOrb mode={orbMode} readLevel={recorder.readLevel} onPress={() => (recording ? stopRecording() : void startRecording())}
+          label={recording ? t('capture.stop') : t('capture.start')}>
+          {recording ? <Square className="size-9 fill-current" /> : <Mic className="size-11" />}
+        </VoiceOrb>
 
-        <div className="mt-4 h-6 text-sm" aria-live="polite">
-          {recording && <span className="font-medium tabular-nums text-accent-700">● {t('capture.recording')} {formatDuration(recorder.elapsedMs)} / {formatDuration(maxMs)}</span>}
-          {processing && <span className="text-muted">{t('capture.processing')}</span>}
-          {!recording && !processing && <span className="text-muted">{t('capture.start')}</span>}
+        <LiveWaveform active={recording} readLevel={recorder.readLevel} />
+
+        <div className="mt-2 min-h-12 text-center text-sm" aria-live="polite">
+          {recording && <span className="inline-flex items-center gap-2 font-medium tabular-nums text-accent-700"><span className="size-2 rounded-full bg-red-500" aria-hidden />{t('capture.listening')} {formatDuration(recorder.elapsedMs)} / {formatDuration(maxMs)}</span>}
+          {recorder.state === 'requesting' && <span className="text-muted">{t('capture.allowMic')}</span>}
+          {processing && (
+            <div className="animate-fade-up space-y-1">
+              <p className="font-medium text-ink">{t('capture.understanding')}</p>
+              <p className="text-xs text-muted">
+                {stage === 'uploading' ? (uploadPct > 0 ? `${t('capture.stageUploading')} ${uploadPct}%` : `${t('capture.stageUploading')}…`) : stage === 'thinking' ? t('capture.stageThinking') : t('capture.stageOrganising')}
+              </p>
+            </div>
+          )}
+          {!recording && !processing && recorder.state !== 'requesting' && <span className="text-muted">{aiBlocked ? '' : t('capture.tapToSpeak')}</span>}
         </div>
 
         {recording && (
-          <div className="mt-4 flex gap-2">
-            <Button variant="secondary" onClick={recorder.cancel} icon={<X className="size-4" />}>{t('capture.cancel')}</Button>
-            <Button onClick={() => recorder.stop().then(handleRecording)} icon={<Square className="size-4" />}>{t('capture.stop')}</Button>
+          <div className="mt-3 flex gap-2 animate-fade-up">
+            <Button variant="secondary" className="press whitespace-nowrap" onClick={recorder.cancel} icon={<X className="size-4" />} aria-label={t('capture.cancel')}>{t('capture.cancelShort')}</Button>
+            <Button className="press whitespace-nowrap" onClick={stopRecording} icon={<Square className="size-4" />} aria-label={t('capture.stop')}>{t('capture.finish')}</Button>
           </div>
         )}
 
@@ -230,20 +255,52 @@ export default function Capture() {
   );
 }
 
-function ReviewCard({ item, categories, error, blocked, onChange }: {
-  item: ReviewedItem; categories: Category[]; error?: string; blocked: boolean; onChange: (p: Partial<ReviewedItem>) => void;
+const TYPE_ICON: Record<ItemType, typeof CheckSquare> = {
+  task: CheckSquare, reminder: Bell, event: CalendarDays, note: StickyNote, idea: Lightbulb, personal_info: Heart,
+};
+
+function ReviewCard({ item, index, categories, error, blocked, onChange }: {
+  item: ReviewedItem; index: number; categories: Category[]; error?: string; blocked: boolean; onChange: (p: Partial<ReviewedItem>) => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  // Items that cannot be saved as they are (e.g. a reminder without a date) open for editing.
+  const [editing, setEditing] = useState(blocked);
+  const [justKept, setJustKept] = useState(false);
   const dated = item.type === 'task' || item.type === 'reminder' || item.type === 'event';
+  const Icon = TYPE_ICON[item.type];
+  const when = item.date ? new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(`${item.date}T12:00:00`)) : null;
+  const keep = () => { onChange({ include: true }); setJustKept(true); };
+
+  if (!item.include) {
+    return (
+      <div className="animate-fade-up flex items-center justify-between gap-3 rounded-2xl border border-dashed border-line px-4 py-3 text-sm text-muted">
+        <span className="min-w-0 truncate"><span className="line-through">{item.title}</span></span>
+        <Button variant="ghost" size="sm" onClick={keep} icon={<RotateCcw className="size-4" />}>{t('capture.undo')}</Button>
+      </div>
+    );
+  }
+
   return (
-    <Card as="article" className={cx('p-4 transition-opacity', !item.include && 'opacity-50')}>
+    <Card as="article" className={cx('animate-card-in p-4 transition-shadow hover:shadow-md', blocked && 'ring-1 ring-amber-300')} style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}>
       <div className="flex items-start gap-3">
-        <input type="checkbox" checked={item.include} onChange={(e) => onChange({ include: e.target.checked })}
-          className="mt-3 size-4 accent-accent-600" aria-label={t('capture.include')} />
-        <div className="min-w-0 flex-1 space-y-3">
+        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent-50 text-accent-700" aria-hidden><Icon className="size-4" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{t(`type.${item.type}` as TranslationKey)}</p>
+          <p className="mt-0.5 font-medium leading-snug break-words">{item.title}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {when && <Badge tone="accent">{when}{item.time ? ` · ${item.time}` : ''}</Badge>}
+            {item.category && <Badge>{item.category}</Badge>}
+            {item.priority === 'high' && <Badge tone="warn">{t('capture.important')}</Badge>}
+          </div>
+        </div>
+        {justKept && <span className="animate-pop mt-1 flex size-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-600" aria-hidden><Check className="size-3.5" /></span>}
+      </div>
+
+      {editing && (
+        <div className="animate-fade-up mt-4 space-y-3 border-t border-line pt-4">
           <div className="flex gap-2">
             <div className="w-32 shrink-0 sm:w-40">
-              <Select value={item.type} onChange={(e) => onChange({ type: e.target.value as ItemType })} aria-label="Type">
+              <Select value={item.type} onChange={(e) => onChange({ type: e.target.value as ItemType })} aria-label={t('capture.kind')}>
                 {ITEM_TYPES.map((ty) => <option key={ty} value={ty}>{t(`type.${ty}` as TranslationKey)}</option>)}
               </Select>
             </div>
@@ -251,39 +308,40 @@ function ReviewCard({ item, categories, error, blocked, onChange }: {
               <Input value={item.title} onChange={(e) => onChange({ title: e.target.value })} aria-label={t('common.title')} maxLength={300} />
             </div>
           </div>
-          {item.include && (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label={t('common.category')}>
-                <Select value={item.category ?? ''} onChange={(e) => onChange({ category: e.target.value || null })}>
-                  <option value="">{t('common.none')}</option>
-                  {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                </Select>
-              </Field>
-              {dated && (
-                <>
-                  <Field label={t('common.date')}>
-                    <Input type="date" value={item.date ?? ''} onChange={(e) => onChange({ date: e.target.value || null, date_confidence: 'explicit' })} />
-                  </Field>
-                  <Field label={t('common.time')}>
-                    <Input type="time" value={item.time ?? ''} onChange={(e) => onChange({ time: e.target.value || null })} />
-                  </Field>
-                </>
-              )}
-            </div>
-          )}
-          {item.include && item.body && (
-            <Textarea value={item.body} onChange={(e) => onChange({ body: e.target.value })} rows={2} aria-label={t('common.details')} />
-          )}
-          {item.include && item.date_text && <p className="text-xs text-muted">“{item.date_text}”</p>}
-          {item.include && item.warnings.filter((w) => !(item.date && /choose a date|needs a date/.test(w))).map((w) => (
-            <p key={w} className="flex items-center gap-1.5 text-xs text-amber-700"><AlertTriangle className="size-3.5" />{w}</p>
-          ))}
-          {blocked && <p className="text-xs font-medium text-red-700">{t('capture.needsDate')}</p>}
-          {error && <Alert>{error}</Alert>}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label={t('common.category')}>
+              <Select value={item.category ?? ''} onChange={(e) => onChange({ category: e.target.value || null })}>
+                <option value="">{t('common.none')}</option>
+                {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </Select>
+            </Field>
+            {dated && (
+              <>
+                <Field label={t('common.date')}>
+                  <Input type="date" value={item.date ?? ''} onChange={(e) => onChange({ date: e.target.value || null, date_confidence: 'explicit' })} />
+                </Field>
+                <Field label={t('common.time')}>
+                  <Input type="time" value={item.time ?? ''} onChange={(e) => onChange({ time: e.target.value || null })} />
+                </Field>
+              </>
+            )}
+          </div>
+          <Textarea value={item.body ?? ''} onChange={(e) => onChange({ body: e.target.value || null })} rows={2} aria-label={t('common.details')} placeholder={t('common.details')} />
         </div>
-        <button onClick={() => onChange({ include: !item.include })} className="rounded-lg p-1.5 text-muted hover:bg-canvas" aria-label={item.include ? t('common.delete') : t('capture.include')}>
-          {item.include ? <Trash2 className="size-4" /> : <RotateCcw className="size-4" />}
-        </button>
+      )}
+
+      {item.date_text && <p className="mt-2 text-xs text-muted">“{item.date_text}”</p>}
+      {item.warnings.filter((w) => !(item.date && /choose a date|needs a date/.test(w))).map((w) => (
+        <p key={w} className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-700"><AlertTriangle className="size-3.5 shrink-0" />{w}</p>
+      ))}
+      {blocked && <p className="mt-1.5 text-xs font-medium text-red-700">{t('capture.needsDate')}</p>}
+      {error && <div className="mt-2"><Alert>{error}</Alert></div>}
+
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button variant="ghost" size="sm" className="press" onClick={() => setEditing((e) => !e)} icon={<Pencil className="size-4" />} aria-expanded={editing}>
+          {editing ? t('capture.doneEditing') : t('common.edit')}
+        </Button>
+        <Button variant="ghost" size="sm" className="press text-red-700" onClick={() => onChange({ include: false })} icon={<X className="size-4" />}>{t('capture.reject')}</Button>
       </div>
     </Card>
   );

@@ -141,15 +141,40 @@ async function callFunction<T>(name: string, body: BodyInit, json: boolean): Pro
   return payload as T;
 }
 
-/** Sends a recording for transcription + organising. `languages` = the user's spoken languages (hints). */
-export function processAudio(blob: Blob, durationMs: number, timezone: string, languages: string[]) {
+/**
+ * Sends a recording for transcription + organising. `languages` = the user's spoken languages
+ * (hints). Uses XMLHttpRequest so the UI can show REAL upload progress; `onUploaded` fires when
+ * the last byte has been sent (from then on the server is transcribing and organising).
+ */
+export async function processAudio(blob: Blob, durationMs: number, timezone: string, languages: string[],
+  progress?: { onUpload?: (fraction: number) => void; onUploaded?: () => void }): Promise<ProcessResult> {
   const form = new FormData();
   const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
   form.append('audio', blob, `capture.${ext}`);
   form.append('duration_ms', String(Math.round(durationMs)));
   form.append('timezone', timezone);
   form.append('languages', JSON.stringify(languages));
-  return callFunction<ProcessResult>('process-voice', form, false);
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new ApiError('unauthorized', 'Not signed in', 401);
+  return new Promise<ProcessResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${functionsUrl}/process-voice`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('apikey', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) progress?.onUpload?.(e.loaded / e.total); };
+    xhr.upload.onload = () => progress?.onUploaded?.();
+    xhr.onerror = () => reject(new ApiError('network', 'Network error'));
+    xhr.ontimeout = () => reject(new ApiError('ai_timeout', 'Request timed out'));
+    xhr.timeout = 180_000;
+    xhr.onload = () => {
+      let payload: { error?: { code?: string; message?: string } } | null = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { /* non-JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300 && payload) resolve(payload as unknown as ProcessResult);
+      else reject(new ApiError(payload?.error?.code ?? `http_${xhr.status}`, payload?.error?.message ?? `Request failed (${xhr.status})`, xhr.status));
+    };
+    xhr.send(form);
+  });
 }
 
 export function processText(text: string, timezone: string, languages: string[]) {

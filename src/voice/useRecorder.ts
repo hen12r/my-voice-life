@@ -29,14 +29,19 @@ export interface Recording { blob: Blob; durationMs: number }
 /**
  * Microphone recorder. Audio stays in memory; nothing is persisted on the device.
  * `stop()` resolves with the recording, `cancel()` discards it.
+ *
+ * Performance: the live audio level is kept in a ref and read by the visualiser's own
+ * animation loop (`readLevel` / `readWaveform`), so React does not re-render on every frame.
+ * `elapsedMs` updates only when the displayed second changes. All measurements come from a
+ * real AnalyserNode on the microphone stream — nothing is simulated.
  */
 export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
   const maxMsRef = useRef(maxMs);
   maxMsRef.current = maxMs;
   const [state, setState] = useState<RecorderState>('idle');
+  const stateRef = useRef<RecorderState>('idle');
   const [error, setError] = useState<RecorderError | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [level, setLevel] = useState(0);
   const [hitLimit, setHitLimit] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -45,17 +50,23 @@ export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
   const startRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sampleBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const levelRef = useRef(0);
   const resolveRef = useRef<((r: Recording | null) => void) | null>(null);
   const cancelledRef = useRef(false);
+
+  const go = useCallback((s: RecorderState) => { stateRef.current = s; setState(s); }, []);
 
   const cleanup = useCallback(() => {
     if (timerRef.current) cancelAnimationFrame(timerRef.current);
     timerRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((t) => t.stop()); // releases the mic (indicator off)
     streamRef.current = null;
+    analyserRef.current = null;
     void audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
-    setLevel(0);
+    levelRef.current = 0;
   }, []);
 
   useEffect(() => () => { cancelledRef.current = true; recorderRef.current?.state === 'recording' && recorderRef.current.stop(); cleanup(); }, [cleanup]);
@@ -63,12 +74,14 @@ export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
   const supported = typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
 
   const start = useCallback(async () => {
+    // One recording at a time: ignore taps while a request or recording is in progress.
+    if (stateRef.current === 'requesting' || stateRef.current === 'recording') return;
     setError(null);
     setHitLimit(false);
     // Browsers hide the microphone API on non-secure pages (http other than localhost).
-    if (typeof window !== 'undefined' && window.isSecureContext === false) { setError('insecure'); setState('error'); return; }
-    if (!supported) { setError('unsupported'); setState('error'); return; }
-    setState('requesting');
+    if (typeof window !== 'undefined' && window.isSecureContext === false) { setError('insecure'); go('error'); return; }
+    if (!supported) { setError('unsupported'); go('error'); return; }
+    go('requesting');
     let stream: MediaStream;
     try {
       try {
@@ -80,7 +93,7 @@ export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
       }
     } catch (e) {
       setError(micErrorFromException(e));
-      setState('error');
+      go('error');
       return;
     }
     streamRef.current = stream;
@@ -96,44 +109,53 @@ export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
       cleanup();
       const resolve = resolveRef.current;
       resolveRef.current = null;
-      if (cancelledRef.current) { chunksRef.current = []; setState('idle'); resolve?.(null); return; }
-      if (durationMs < MIN_RECORDING_MS) { chunksRef.current = []; setError('too_short'); setState('error'); resolve?.(null); return; }
+      if (cancelledRef.current) { chunksRef.current = []; go('idle'); resolve?.(null); return; }
+      if (durationMs < MIN_RECORDING_MS) { chunksRef.current = []; setError('too_short'); go('error'); resolve?.(null); return; }
       const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || 'audio/webm' });
       chunksRef.current = [];
-      setState('stopped');
+      go('stopped');
       resolve?.({ blob, durationMs });
     };
 
-    // Input level meter (visual feedback that the mic is picking up sound).
+    // Real input level from the microphone (drives the visualiser; optional).
     try {
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.6;
       ctx.createMediaStreamSource(stream).connect(analyser);
-      const buf = new Uint8Array(analyser.fftSize);
-      const tick = () => {
-        analyser.getByteTimeDomainData(buf);
-        let peak = 0;
-        for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
-        setLevel(Math.min(1, peak / 64));
-        const elapsed = Date.now() - startRef.current;
-        setElapsedMs(elapsed);
-        if (elapsed >= maxMsRef.current && recorder.state === 'recording') { setHitLimit(true); recorder.stop(); return; }
-        timerRef.current = requestAnimationFrame(tick);
-      };
-      timerRef.current = requestAnimationFrame(tick);
+      analyserRef.current = analyser;
+      sampleBufRef.current = new Uint8Array(analyser.fftSize);
     } catch {
-      // Level meter is optional; fall back to a plain timer.
-      const tick = () => { setElapsedMs(Date.now() - startRef.current); timerRef.current = requestAnimationFrame(tick); };
-      timerRef.current = requestAnimationFrame(tick);
+      analyserRef.current = null; // no meter: the timer and recording still work
     }
+
+    let shownSecond = -1;
+    const tick = () => {
+      const analyser = analyserRef.current;
+      const buf = sampleBufRef.current;
+      if (analyser && buf) {
+        analyser.getByteTimeDomainData(buf);
+        // RMS of the waveform, mapped to 0..1 with a gentle curve so speech fills the range.
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+        const rms = Math.sqrt(sum / buf.length);
+        levelRef.current = Math.min(1, Math.pow(rms * 4, 0.8));
+      }
+      const elapsed = Date.now() - startRef.current;
+      const second = Math.floor(elapsed / 1000);
+      if (second !== shownSecond) { shownSecond = second; setElapsedMs(elapsed); }
+      if (elapsed >= maxMsRef.current && recorder.state === 'recording') { setHitLimit(true); setElapsedMs(elapsed); recorder.stop(); return; }
+      timerRef.current = requestAnimationFrame(tick);
+    };
 
     startRef.current = Date.now();
     setElapsedMs(0);
     recorder.start(1000);
-    setState('recording');
-  }, [cleanup, supported]);
+    go('recording');
+    timerRef.current = requestAnimationFrame(tick);
+  }, [cleanup, supported, go]);
 
   const stop = useCallback((): Promise<Recording | null> => {
     const rec = recorderRef.current;
@@ -147,12 +169,15 @@ export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
   const cancel = useCallback(() => {
     cancelledRef.current = true;
     const rec = recorderRef.current;
-    if (rec && rec.state === 'recording') rec.stop(); else { cleanup(); setState('idle'); }
-  }, [cleanup]);
+    if (rec && rec.state === 'recording') rec.stop(); else { cleanup(); go('idle'); }
+  }, [cleanup, go]);
 
-  const reset = useCallback(() => { setState('idle'); setError(null); setElapsedMs(0); }, []);
+  const reset = useCallback(() => { go('idle'); setError(null); setElapsedMs(0); }, [go]);
 
-  return { state, error, elapsedMs, level, hitLimit, supported, start, stop, cancel, reset, waitForAutoStop };
+  /** Latest real input level, 0..1 (0 when not recording). Cheap; call from animation frames. */
+  const readLevel = useCallback(() => levelRef.current, []);
+
+  return { state, error, elapsedMs, hitLimit, supported, start, stop, cancel, reset, waitForAutoStop, readLevel };
 }
 
 export function formatDuration(ms: number): string {

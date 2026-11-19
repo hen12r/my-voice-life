@@ -9,6 +9,7 @@ import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
 import { browserTimeZone, isValidTimeZone } from '../lib/dates';
 import { supabase } from '../lib/supabase';
+import { playCue, setSoundEnabled, soundEnabled } from '../lib/sound';
 import { Alert, Badge, Button, Card, CardHeader, Field, Input, Modal, PageHeader, Select } from '../components/ui';
 
 
@@ -24,6 +25,7 @@ export default function Settings() {
   const [catError, setCatError] = useState<string | null>(null);
   const [sub, setSub] = useState<Subscription | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [sound, setSound] = useState(soundEnabled());
 
   useEffect(() => { setForm(profile); }, [profile]);
   useEffect(() => { getSubscription().then(setSub).catch(() => undefined); void refreshUsage(); }, []);
@@ -163,6 +165,17 @@ export default function Settings() {
           <p className="text-muted">{t('settings.audioPolicy')}</p>
           <Button variant="secondary" className="text-red-700" onClick={() => setDeleting(true)} icon={<Trash2 className="size-4" />}>{t('settings.deleteAccount')}</Button>
         </div>
+      </Card>
+
+      <Card>
+        <label className="flex cursor-pointer items-start justify-between gap-4 px-5 py-4">
+          <span>
+            <span className="block text-sm font-semibold text-ink">{t('settings.sound')}</span>
+            <span className="mt-1 block text-xs text-muted">{t('settings.soundHint')}</span>
+          </span>
+          <input type="checkbox" role="switch" className="mt-1 size-5 shrink-0 accent-accent-600" checked={sound}
+            onChange={(e) => { setSoundEnabled(e.target.checked); setSound(e.target.checked); if (e.target.checked) playCue('ready'); }} />
+        </label>
       </Card>
 
       {/* Sign out is here so it is reachable on phones (the sidebar is desktop-only). */}
