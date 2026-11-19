@@ -40,7 +40,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | $2/day and $20/month hard budgets with worst-case holds; alerts at 50/80/100%; admin webhook | ✅ DB / 🟡 webhook | DB tests; webhook needs a live deployment |
 | Concurrency: simultaneous requests can't bypass limits or budgets | ✅ | two-session race tests; confirmed to fail when the lock is removed |
 | Kill switch + `admins_only` test mode (default) | ✅ | DB tests |
-| `process-voice` reservation flow, real token recording, thinking off, output cap | 🟡 | `deno check` + 7 unit tests; **not yet run against real Gemini/Supabase** |
+| `process-voice` reservation flow, real token recording, thinking off, output cap | 🟡 | 17 Deno orchestration tests with fakes (verified to fail when refusals are ignored) + CI; **not yet run against real Gemini/Supabase** |
 | Admin dashboard (usage, controls, limits, finance with labels, expenses) | 🟡 | render-tested with mocked data under the real CSP; needs a live DB |
 | Allowance display + refusal messages in the app | 🟡 | render-tested with mocked data |
 | Actual AI cost of premium allowance measured from real usage | ⬜ | required before commercial launch |

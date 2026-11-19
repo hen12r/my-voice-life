@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:db": "bash scripts/test-db.sh",
-    "check:env": "node scripts/check-env.mjs"
+    "check:env": "node scripts/check-env.mjs",
+    "test:functions": "deno test --allow-env supabase/functions/process-voice/ || npx -y deno@2.1.4 test --allow-env supabase/functions/process-voice/"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
@@ -28,7 +29,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vitest": "^3.0.0"
+    "vitest": "^5.1.1"
   },
   "engines": {
     "node": "22.x"

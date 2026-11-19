@@ -14,7 +14,8 @@ reset_db() {
   for r in anon authenticated service_role; do PGOPTIONS="$QUIET" psql -q -d postgres -c "drop role if exists $r" >/dev/null 2>&1 || true; done
   PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q -d "$1" -f supabase/tests/supabase_shim.sql
 }
-migrate() { for f in "${MIGRATIONS[@]}"; do PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d "$1" -f "$f"; done; }
+# Stops at the first failing migration, like `supabase db push` does.
+migrate() { for f in "${MIGRATIONS[@]}"; do PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d "$1" -f "$f" || return 1; done; }
 run_test() { psql -v ON_ERROR_STOP=1 -d "$1" -f "$2" 2>&1 | sed -n 's/^.*NOTICE:  //p; /PASSED/p; /FAIL/p; /ERROR/p'; }
 
 echo "== Scenario: fresh project"
@@ -66,7 +67,7 @@ reset_db mvl_test
 psql -q -d mvl_test -c "create table public.notes (id serial primary key, text text)"
 if migrate mvl_test 2>/tmp/mvl_guard.err; then echo "FAIL  migration should have aborted"; exit 1; fi
 grep -q "MVL pre-flight" /tmp/mvl_guard.err && echo "PASS  aborted with pre-flight message"
-[ "$(psql -tA -d mvl_test -c "select count(*) from pg_tables where schemaname='public' and tablename in ('categories','tasks','profiles')")" = "0" ] \
+[ "$(psql -tA -d mvl_test -c "select count(*) from pg_tables where schemaname='public' and (tablename in ('categories','tasks','profiles') or tablename like 'mvl\\_%')")" = "0" ] \
   && echo "PASS  nothing was created (rolled back)" || { echo "FAIL  partial changes left behind"; exit 1; }
 echo "ALL GUARD TESTS PASSED"
 

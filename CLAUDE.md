@@ -13,6 +13,8 @@ Tagline: *Your voice. Your ideas. Your organised life.*
 - `npm run typecheck` / `npm test` (Vitest) / `npm run build`
 - `npm run test:db` — applies all migrations to a throwaway local Postgres with a Supabase shim and runs `supabase/tests/rls_test.sql`. Needs `PGHOST/PGPORT/PGUSER` pointing at a **local** Postgres. Never point it at production.
 - `npx deno@2.1.4 check supabase/functions/*/index.ts` — type-check Edge Functions.
+- `npm run test:functions` — Deno orchestration tests for `process-voice` (fakes for Gemini/Supabase; proves reserve → paid call → record → finish ordering).
+- CI: `.github/workflows/ci.yml` runs all of the above plus `test:db` on every push/PR. Keep it green; never skip or disable a test to pass it.
 - `npm run check:env [-- --origin <url>]` — validates `.env.local` and probes Supabase (auth health, anon access blocked, function + CORS). Prints masked values only.
 - `node scripts/eval/transcribe.mjs` / `score.mjs` — Kinyarwanda/STT evaluation (see `docs/kinyarwanda/TEST_PLAN.md`); data lives in git-ignored `eval-data/`.
 
@@ -42,7 +44,7 @@ src/
 supabase/
   migrations/             versioned SQL
   functions/_shared/      extraction.ts, transcription.ts, cors.ts, usage.ts (pure, shared & tested), http.ts (Deno-only)
-  functions/process-voice transcription + extraction (Gemini)
+  functions/process-voice handler.ts (logic, injectable deps) + index.ts (wiring) + handler.test.ts (Deno)
   functions/delete-account
   tests/                  shim + RLS test suite
   preflight/              read-only inspection SQL to run before approving migrations
