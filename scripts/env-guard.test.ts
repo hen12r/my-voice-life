@@ -14,6 +14,8 @@ describe('env guard', () => {
   });
   it('rejects any VITE_GEMINI_API_KEY even if empty, and secret-looking values in allowed names', () => {
     expect(findPublicEnvProblems({ VITE_GEMINI_API_KEY: '' })).toHaveLength(1);
+    expect(findPublicEnvProblems({ VITE_OPENAI_API_KEY: '' })).toHaveLength(1);
+    expect(findPublicEnvProblems({ VITE_SUPABASE_PUBLISHABLE_KEY: 'sk-proj-abc123' })[0]).toMatch(/secret/);
     expect(findPublicEnvProblems({ VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_abc' })[0]).toMatch(/secret/);
     expect(findPublicEnvProblems({ VITE_SUPABASE_PUBLISHABLE_KEY: 'AIzaSyA1234567890abcdefghijklmn' })[0]).toMatch(/secret/);
   });

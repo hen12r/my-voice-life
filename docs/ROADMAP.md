@@ -40,7 +40,13 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | $2/day and $20/month hard budgets with worst-case holds; alerts at 50/80/100%; admin webhook | ✅ DB / 🟡 webhook | DB tests; webhook needs a live deployment |
 | Concurrency: simultaneous requests can't bypass limits or budgets | ✅ | two-session race tests; confirmed to fail when the lock is removed |
 | Kill switch + `admins_only` test mode (default) | ✅ | DB tests |
-| `process-voice` reservation flow, real token recording, thinking off, output cap | 🟡 | 17 Deno orchestration tests with fakes (verified to fail when refusals are ignored) + CI; **not yet run against real Gemini/Supabase** |
+| `process-voice` reservation flow, real usage recording, output cap | 🟡 | 27 Deno orchestration tests with fakes + real recordings + CI; **not yet run against real OpenAI/Supabase** |
+| OpenAI provider (gpt-transcribe + gpt-6-luna Responses API, strict JSON schema) replacing Gemini | 🟡 | request shapes and response parsing tested against fakes; models and prices verified on developers.openai.com 2026-11-19; **no live call yet (no key, by owner decision)** |
+| Server-side audio length from the file (WebM/Ogg/MP4) before reserving | ✅ | parser tests on real Chromium MediaRecorder WebM + ffmpeg Ogg/MP4 fixtures; a 60 s low-bitrate file claimed as 2 s is reserved at 60 s |
+| Microphone flow (permission, record, timer, stop/cancel, upload, review, edit/accept/reject, save) | 🟡 | end-to-end in Chromium with a fake microphone and a mocked backend (tester success, denied, in use, non-staff, provider busy); **real phones (iOS Safari, Android Chrome) not tested yet** |
+| Multilingual: language registry, interface vs spoken languages (up to 3), mixed-language hints | ✅ code / ⬜ quality | registry + DB tests; **no language verified for voice yet** (needs native-speaker recordings) |
+| Google sign-in | 🟡 | button and redirect tested in a browser; **needs Google Cloud credentials + Supabase provider** (docs/GOOGLE_OAUTH_SETUP.md) |
+| Note translation | ⬜ | designed (original kept, translation stored beside it, counted as an AI capture); not built |
 | Admin dashboard (usage, controls, limits, finance with labels, expenses) | 🟡 | render-tested with mocked data under the real CSP; needs a live DB |
 | Allowance display + refusal messages in the app | 🟡 | render-tested with mocked data |
 | Actual AI cost of premium allowance measured from real usage | ⬜ | required before commercial launch |
@@ -49,7 +55,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 1. ~~Decide where the code lives~~: done, moved to the dedicated repo `hen12r/my-voice-life` with full history.
 2. Create the `my-voice-life` Vercel project from `hen12r/my-voice-life` (Root Directory `.`), never reusing Photosentry's env vars.
 3. Create a fresh Supabase project (recommended) or restore the paused one; run the read-only pre-flight; approve the migration.
-4. Set `GEMINI_API_KEY` + `ALLOWED_ORIGINS` as Supabase Function Secrets; **rotate the old key** if FitPick was ever deployed.
+4. Set `OPENAI_API_KEY` + `ALLOWED_ORIGINS` as Supabase Function Secrets (responsible adult, docs/OPENAI_SETUP.md); remove any old `GEMINI_API_KEY`, and **rotate the old Gemini key** if FitPick was ever deployed.
 5. Record Kinyarwanda clips with written consent (docs/kinyarwanda/TEST_PLAN.md).
 
 ## Milestone 2 — Verify end-to-end on the real project

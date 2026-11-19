@@ -31,5 +31,5 @@ Without `.env.local`, the app shows a "Connect Supabase" screen instead of crash
 
 ## Security reminders
 - The old FitPick build injected the Gemini key into the browser bundle. If FitPick was ever deployed or the key shared, **rotate that key** in Google AI Studio.
-- Server secrets (`GEMINI_API_KEY`, `ALLOWED_ORIGINS`) live only in Supabase Function Secrets.
+- Server secrets (`OPENAI_API_KEY`, `ALLOWED_ORIGINS`) live only in Supabase Function Secrets. See `docs/OPENAI_SETUP.md`.
 - Evaluation recordings (`eval-data/`) and database backups (`backup/`, `*.dump`) are git-ignored because they contain personal data.

@@ -24,12 +24,14 @@ Below that bar, Kinyarwanda stays "experimental" or is hidden, and we test Googl
 - Use **pseudonymous IDs** (`S01`…`S05`) in the sheet, never names.
 - Get **written consent before recording**. The consent must say that:
   1. the recording is used only to test speech recognition for My Voice Life;
-  2. it is sent to Google (Gemini API) for transcription, and possibly to Google Cloud Speech-to-Text for comparison;
+  2. it is sent to OpenAI (API, `gpt-transcribe`) for transcription, and possibly to another speech-to-text provider for comparison;
   3. it is stored on the project owner's computer only, never published and never committed to GitHub;
   4. it is deleted after testing (state a date), and the speaker can withdraw at any time.
 - Record a consent reference in `consent_ref` (for example `C-2026-11-S01`). Keep the signed forms offline.
 
-> ⚠️ **Gemini free tier:** check Google's current Gemini API terms before sending recordings. As far as I know, content sent on the unpaid tier may be used by Google to improve its products, and the paid tier is excluded. If that's still the case, use a paid key (billing enabled), or say so explicitly in the consent form. Enabling billing costs money and is your decision.
+> ℹ️ **Provider changed (2026-11-19):** recordings now go to OpenAI's API, which by default does not use API data for training. Keep the consent form accurate about where audio is sent. The note below applied to the earlier Gemini setup.
+>
+> ⚠️ **Gemini free tier (historical):** check Google's current Gemini API terms before sending recordings. As far as I know, content sent on the unpaid tier may be used by Google to improve its products, and the paid tier is excluded. If that's still the case, use a paid key (billing enabled), or say so explicitly in the consent form. Enabling billing costs money and is your decision.
 
 ## 3. What to record
 Script: `docs/kinyarwanda/prompts.csv` (18 prompts in English, French and **draft** Kinyarwanda).
@@ -90,8 +92,9 @@ node scripts/eval/transcribe.mjs eval-data/test-sheet.csv --audio-dir eval-data/
 ```
 ```bash
 # 2. Transcribe. The key comes only from your shell session, never from a file in the repo.
-#    Windows PowerShell:  $env:GEMINI_API_KEY = Read-Host -MaskInput "Gemini key"
-#    macOS/Linux:         read -rs GEMINI_API_KEY && export GEMINI_API_KEY
+#    Windows PowerShell:  $env:OPENAI_API_KEY = Read-Host -MaskInput "OpenAI key"
+#    macOS/Linux:         read -rs OPENAI_API_KEY && export OPENAI_API_KEY
+#    Billed by OpenAI at $0.0045 per minute of audio (2026-11-19).
 node scripts/eval/transcribe.mjs eval-data/test-sheet.csv --audio-dir eval-data/audio
 ```
 ```bash
@@ -101,7 +104,7 @@ node scripts/eval/score.mjs eval-data/test-sheet.csv --write
 The transcriber uses **the same prompt as production** (`supabase/functions/_shared/transcription.ts`), so the numbers describe the real app. Send me the summary that `score.mjs` prints (it contains no audio and no names), and I'll analyse it and propose next steps.
 
 ## 6. After the results
-- **Pass:** keep Gemini for Kinyarwanda, remove the "experimental" label, and record the evidence (n, speakers, median WER) in `docs/ROADMAP.md`.
-- **Fail on Gemini:** run the same clips through Google Cloud Speech-to-Text `rw-RW` (I'll add it behind the existing `transcribe()` interface) and compare on the same sheet.
+- **Pass:** keep OpenAI for Kinyarwanda and record the evidence in the language registry (`voiceTest`) and `docs/LANGUAGES.md`.
+- **Fail on OpenAI:** run the same clips through another provider with Kinyarwanda support (e.g. Google Cloud Speech-to-Text `rw-RW`), added behind the existing `AiProvider` interface, and compare on the same sheet.
 - **Fail on both:** keep Kinyarwanda hidden or experimental and say so publicly. Don't market it.
 - Delete the recordings on the date promised in the consent form.

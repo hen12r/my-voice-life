@@ -1,5 +1,7 @@
 # Cost control plan
 
+> **Update 2026-11-19:** the AI provider is now **OpenAI** (`gpt-transcribe` $0.0045/min + `gpt-6-luna` $0.10/$0.50 per 1M tokens; see [OPENAI_SETUP.md](OPENAI_SETUP.md)). The controls described here (reservation, budgets, kill switch, test mode, ledger) are unchanged and apply to OpenAI; Gemini-specific prices and steps below are historical.
+
 Status: **audit approved; controls implemented locally (2026-11-18), not yet applied to any live database.** No paid plan, billing account or paid API has been enabled. Section 5 shows the implementation status.
 Prices were checked on the providers' own pricing pages on **2026-11-18**. They change, so re-check before relying on them. USD prices are shown as published; where a € figure appears it assumes **$1 ≈ €0.90**, so replace it with the real rate.
 

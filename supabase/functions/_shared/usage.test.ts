@@ -1,36 +1,50 @@
 import { describe, expect, it } from 'vitest';
-import { audioSecondsFromCount, maxUploadBytes, parseUsageMetadata, refusalStatus } from './usage.ts';
+import { estimateCaptureSeconds, maxUploadBytes, parseResponsesUsage, refusalStatus, transcriptionSeconds } from './usage.ts';
 
-describe('parseUsageMetadata', () => {
-  it('splits audio and text prompt tokens and reads output + thinking', () => {
-    const u = parseUsageMetadata({
-      promptTokenCount: 1010, candidatesTokenCount: 150, thoughtsTokenCount: 12,
-      promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 960 }, { modality: 'TEXT', tokenCount: 50 }],
-    }, true);
-    expect(u).toEqual({ audio_tokens: 960, text_in_tokens: 50, output_tokens: 150, thinking_tokens: 12 });
+const WORST = { inputTokens: 5000, outputTokens: 2048 };
+
+describe('parseResponsesUsage', () => {
+  it('splits reasoning tokens out of output tokens', () => {
+    expect(parseResponsesUsage({ input_tokens: 900, output_tokens: 150, output_tokens_details: { reasoning_tokens: 40 } }, WORST))
+      .toEqual({ audio_tokens: 0, text_in_tokens: 900, output_tokens: 110, thinking_tokens: 40 });
   });
-  it('books tokens missing from the breakdown at the audio rate when the call had audio', () => {
-    const u = parseUsageMetadata({ promptTokenCount: 1000, promptTokensDetails: [{ modality: 'TEXT', tokenCount: 40 }] }, true);
-    expect(u.audio_tokens).toBe(960);
+  it('books cached input at the full rate (never under-counts)', () => {
+    expect(parseResponsesUsage({ input_tokens: 1000, input_tokens_details: { cached_tokens: 800 }, output_tokens: 10 }, WORST).text_in_tokens).toBe(1000);
   });
-  it('without a breakdown, books all prompt tokens as audio for audio calls and text otherwise', () => {
-    expect(parseUsageMetadata({ promptTokenCount: 500 }, true).audio_tokens).toBe(500);
-    expect(parseUsageMetadata({ promptTokenCount: 500 }, false).text_in_tokens).toBe(500);
+  it('books the worst case when usage is missing', () => {
+    expect(parseResponsesUsage(undefined, WORST)).toEqual({ audio_tokens: 0, text_in_tokens: 5000, output_tokens: 2048, thinking_tokens: 0 });
   });
-  it('treats missing/invalid values as zero, never negative', () => {
-    expect(parseUsageMetadata(undefined, false)).toEqual({ audio_tokens: 0, text_in_tokens: 0, output_tokens: 0, thinking_tokens: 0 });
-    expect(parseUsageMetadata({ candidatesTokenCount: -5, thoughtsTokenCount: 'x' }, false).output_tokens).toBe(0);
+  it('ignores negative or non-numeric values', () => {
+    expect(parseResponsesUsage({ input_tokens: -5, output_tokens: 'x' }, WORST)).toEqual({ audio_tokens: 0, text_in_tokens: 0, output_tokens: 0, thinking_tokens: 0 });
   });
 });
 
-describe('audio length and limits', () => {
-  it('derives seconds from countTokens (32 tokens/s)', () => {
-    expect(audioSecondsFromCount({ totalTokens: 1920 })).toBe(60);
-    expect(audioSecondsFromCount({ totalTokens: 2000, promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 960 }] })).toBe(30);
+describe('transcriptionSeconds', () => {
+  it('uses the duration the provider billed', () => {
+    expect(transcriptionSeconds({ type: 'duration', seconds: 12.345 }, 99)).toEqual({ seconds: 12.35, reported: true });
   });
-  it('bounds upload size generously above the recording bitrate', () => {
+  it('falls back to the server-measured length when only tokens are reported', () => {
+    expect(transcriptionSeconds({ type: 'tokens', input_tokens: 60 }, 7.5)).toEqual({ seconds: 7.5, reported: false });
+    expect(transcriptionSeconds(null, 3)).toEqual({ seconds: 3, reported: false });
+  });
+});
+
+describe('estimateCaptureSeconds', () => {
+  it('prefers the container duration and lets the client claim only increase it', () => {
+    expect(estimateCaptureSeconds({ parsedSeconds: 60, declaredMs: 2000, bytes: 52_000 })).toEqual({ seconds: 60, verified: true });
+    expect(estimateCaptureSeconds({ parsedSeconds: 3.96, declaredMs: 30_000, bytes: 16_000 })).toEqual({ seconds: 30, verified: true });
+  });
+  it('falls back to a byte-based bound when the container cannot be parsed', () => {
+    expect(estimateCaptureSeconds({ parsedSeconds: null, declaredMs: 1000, bytes: 80_000 })).toEqual({ seconds: 10, verified: false });
+    expect(estimateCaptureSeconds({ parsedSeconds: null, declaredMs: 20_000, bytes: 80_000 })).toEqual({ seconds: 20, verified: false });
+  });
+});
+
+describe('limits', () => {
+  it('bounds upload size generously above the recording bitrate, below the 25 MB provider limit', () => {
     expect(maxUploadBytes(120)).toBe(120 * 32_000 + 65_536);
-    expect(maxUploadBytes(120)).toBeGreaterThan(120 * 4_000 * 4); // 4x the 32 kbit/s opus size
+    expect(maxUploadBytes(120)).toBeGreaterThan(120 * 4_000 * 4);
+    expect(maxUploadBytes(600)).toBeLessThan(25 * 1024 * 1024);
   });
   it('maps refusal reasons to HTTP statuses', () => {
     expect(refusalStatus('quota_captures')).toBe(429);

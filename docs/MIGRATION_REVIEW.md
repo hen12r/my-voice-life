@@ -137,3 +137,32 @@ I apply it with the Supabase migration tool, so it's recorded in the project's m
 
 ## Rollback (if ever needed, after approval)
 Drop the `mvl_*` functions and tables, and re-create the note-quota trigger from migration 1. No user content is involved. I'll prepare it as a separate file if you ask.
+
+---
+
+# 3. `20261119000001_mvl_openai_pricing.sql` — OpenAI per-minute pricing
+
+**Status:** written and tested locally; **not applied**. Applying it needs the owner's explicit approval.
+
+| Question | Answer |
+|---|---|
+| Does it delete data? | **No.** It adds one column, two price rows and one function, and replaces one `mvl_` function |
+| Requires | migration 2. Its pre-flight aborts with a clear message otherwise |
+| Changes | `mvl_price_book.audio_usd_per_minute` (default 0, must be ≥ 0). Rows `openai / gpt-transcribe+gpt-6-luna` ($0.0045/min, $0.10/$0.50 per 1M tokens) and `openai / gpt-6-luna` (text only), with source URLs and date 2026-11-19 |
+| Replaced function | `mvl_capture_cost_ceiling`: the worst-case hold now adds `ceil(seconds)/60 × per-minute rate`. The existing token terms are unchanged, so Gemini rows keep their old ceilings |
+| New function | `mvl_record_ai_transcription(reservation, seconds)`: books `ceil(seconds)/60 × rate` and sets the capture's `audio_seconds` to the billed length. It rejects negative or absurd durations and closed reservations. **Service role only** |
+| Gemini rows | left as they are (inert: no code requests them). They are historical, and the existing financial tests use them as generic fixtures |
+| Tests | `supabase/tests/openai_multilingual_test.sql`: price rows, ceilings ($0.007198 for 60 s), recording maths, closed-reservation and negative-duration refusals, unknown model fails closed, non-staff refused, users can't call the RPC, free allowance enforced |
+
+# 4. `20261119000002_mvl_multilingual.sql` — multilingual profiles
+
+**Status:** written and tested locally; **not applied**.
+
+| Question | Answer |
+|---|---|
+| Does it delete data? | **No.** It drops two of *our own* check constraints (fixed `en/fr/rw` lists) and replaces them with code-format checks. No row is changed, except the carry-over below |
+| New column | `profiles.speech_languages text[]` (default empty, at most 3, each a valid ISO 639 code via `mvl_valid_language_codes`). Owners may update it (column grant); RLS unchanged |
+| Data carry-over | users who had picked one spoken language get it copied into `speech_languages` |
+| Compatibility | `speech_language` is kept (`'auto'` or the first spoken language) for older clients |
+| Tests | any code accepted for the interface language (`sw`, `zh-cn`); more than 3, or invalid codes, rejected; a user can't change another user's languages; notes keep their language; search finds Kinyarwanda, Chinese (no spaces) and accented French text. The old "invalid language rejected" check now uses a really invalid code |
+| Atomic and re-runnable | yes: the whole suite applies every migration twice, in single transactions |

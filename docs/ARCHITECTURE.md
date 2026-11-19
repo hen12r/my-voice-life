@@ -10,15 +10,15 @@ Supabase
   ├─ Auth (email + password, password recovery)
   ├─ Postgres  ── RLS on every user table · quota trigger · new-user bootstrap trigger · search_memory() RPC
   └─ Edge Functions (Deno)
-       ├─ process-voice  → Gemini (transcribe) → Gemini (structured extraction) → validateExtraction() → proposals
+       ├─ process-voice  → OpenAI gpt-transcribe (speech → text) → OpenAI gpt-6-luna (strict JSON schema) → validateExtraction() → proposals
        └─ delete-account → auth.admin.deleteUser (service role, server-only) → cascades all data
 ```
 
 ## The voice-to-action pipeline
 1. `useRecorder` captures Opus/WebM (or MP4 on Safari) in memory, max 5 min, with level meter, cancel and permission-error handling.
-2. `process-voice` authenticates the caller, checks size and type, measures the exact audio length with Gemini's free `countTokens`, then **reserves** the capture in the database (`mvl_reserve_ai_capture`: allowance, rate limits, budgets, kill switch, test mode). Nothing paid happens without a reservation. See `docs/FINANCIAL_CONTROL_ARCHITECTURE.md`.
-3. **Transcription**: Gemini audio input, prompt = verbatim, no translation; returns `{transcript, language}`.
-4. **Extraction**: a second Gemini call with `responseSchema` and today's date and weekday *in the user's time zone*. The prompt forbids invention and requires `date_confidence`.
+2. `process-voice` authenticates the caller, checks size and type, reads the exact audio length from the recording's container (WebM/Ogg/MP4, `_shared/audio-duration.ts`; the client's claim can only lengthen it), then **reserves** the capture in the database (`mvl_reserve_ai_capture`: allowance, rate limits, budgets, kill switch, test mode). Nothing paid happens without a reservation. See `docs/FINANCIAL_CONTROL_ARCHITECTURE.md`.
+3. **Transcription**: `gpt-transcribe` on the uploaded file, with the user's spoken languages as `languages[]` hints (retried once without hints if rejected); billed per minute, the billed duration is recorded.
+4. **Extraction**: Responses API call to `gpt-6-luna` with a strict JSON schema (Structured Outputs), `reasoning.effort: none`, `store: false`, the output cap from the reservation, and today's date and weekday *in the user's time zone*. The instructions forbid invention and translation; the transcript is passed separately as data. Refusals and incomplete responses are handled explicitly.
 5. **Validation** (`_shared/extraction.ts`, unit-tested): drops unknown types, bounds lengths, rejects impossible dates, **clears non-explicit dates**, flags reminders/events with no date, maps categories to ones the user owns.
 6. The client shows editable cards. The user accepts, edits or rejects each one. Reminders and events cannot be saved without a date.
 7. `commitItems` inserts each accepted item separately (one failure, such as the quota, doesn't lose the others) and converts local date/time to UTC with the user's IANA zone.
@@ -53,7 +53,9 @@ Cross-user references are impossible: child tables use composite FKs `(category_
 | OpenAI Whisper / gpt-4o-transcribe | strong | strong | not in Whisper's documented language list (verify) | |
 | ElevenLabs Scribe | strong | strong | check their current list | |
 
-Evaluation method and tooling: [kinyarwanda/TEST_PLAN.md](kinyarwanda/TEST_PLAN.md). Decision: start with **Gemini** for en/fr (lowest integration cost, existing key). Treat Kinyarwanda as **experimental** until it has been tested on real recordings from native speakers (target: WER against hand transcripts on 30+ clips). If Gemini is poor on rw, route `language_hint = rw` to Google Cloud STT `rw-RW` behind the same `transcribe()` interface. Nothing in the UI claims rw works beyond "experimental".
+> **Update 2026-11-19:** the provider is now **OpenAI `gpt-transcribe`** (owner decision). Language support is tracked per language in [LANGUAGES.md](LANGUAGES.md); every voice language is *unverified* until tested. The comparison below is the original (Gemini-era) analysis, kept for history.
+
+Evaluation method and tooling: [kinyarwanda/TEST_PLAN.md](kinyarwanda/TEST_PLAN.md). Decision (superseded): start with **Gemini** for en/fr (lowest integration cost, existing key). Treat Kinyarwanda as **experimental** until it has been tested on real recordings from native speakers (target: WER against hand transcripts on 30+ clips). If Gemini is poor on rw, route `language_hint = rw` to Google Cloud STT `rw-RW` behind the same `transcribe()` interface. Nothing in the UI claims rw works beyond "experimental".
 
 ## Known limitations (by design for this milestone)
 - Reminder **delivery** (push/email) is not implemented; reminders are stored and shown in the app. Planned: `pg_cron` → Edge Function → Web Push (VAPID), using `reminders_due_idx`.

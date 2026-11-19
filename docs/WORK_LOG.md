@@ -40,5 +40,22 @@ Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the o
 - **Deployment incident:** a first API-triggered build was classified `production` by Vercel even though no target was sent. It was cancelled within seconds, before it was ready, so nothing was served. Previews now come from Git pushes to this branch.
 - Not done yet: Edge Functions deployment, Gemini key, admin account, Supabase Auth URL configuration.
 
+## 2026-11-19 — OpenAI voice pipeline, microphone fixes, multilingual, Google sign-in (branch `claude/openai-voice`)
+- **Root cause of the "broken" microphone** (audit): no Edge Function deployed, no AI key, and the mic is disabled by design for accounts that are not staff while AI is `admins_only` (0 staff rows). The Gemini code itself was never live.
+- **OpenAI provider** behind an `AiProvider` interface. `gpt-transcribe` for speech, `gpt-6-luna` through the Responses API with a strict JSON schema for extraction. Models and prices were verified on developers.openai.com. All Gemini code was removed.
+- **Cost control without a free length probe:** the server reads the real duration from WebM/Ogg/MP4 before reserving; the client's claim can only lengthen it. Billed seconds are recorded with the new `mvl_record_ai_transcription`. If a call times out, the measured length is booked.
+- **Migrations 3–4** (local only):
+  - per-minute pricing;
+  - multilingual profiles (`speech_languages`, code-format checks).
+- **Microphone:** specific messages for a non-secure page and for a microphone in use or blocked by the system (they were "Something went wrong"); a retry when the device rejects the constraints. The allowance bar is hidden when AI isn't available (it contradicted the test-mode notice).
+- **Multilingual:** 24-language registry with honest interface and voice statuses (none verified); Settings picker for up to 3 spoken languages; locale and direction handling; the evaluation script ported to OpenAI.
+- **Google sign-in button** plus a setup guide; email and password unchanged.
+- **Tests:**
+  - 160 DB checks (+30);
+  - 99 unit tests (+43);
+  - 27 Deno orchestration tests (+10);
+  - browser end-to-end runs: tester success, mic denied, mic in use, non-staff, provider busy, Settings languages, Google redirect.
+- **Not done (needs the owner or adult):** OpenAI account, credits and key; migrations; function deploy; tester row; Google credentials; real-phone and native-speaker tests.
+
 ## Earlier milestones
 See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.

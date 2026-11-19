@@ -5,14 +5,13 @@ import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
 import { commitItems, createNote, DEFAULT_REMINDER_TIME, listCategories, processAudio, processText, type ProcessResult, type ReviewedItem } from '../lib/api';
 import { ITEM_TYPES, type ItemType } from '../../supabase/functions/_shared/extraction.ts';
+import { getLanguage, isKnownLanguage, languageLabel } from '../../supabase/functions/_shared/languages.ts';
 import type { Category } from '../lib/types';
 import { browserTimeZone } from '../lib/dates';
 import { DEFAULT_MAX_RECORDING_MS, formatDuration, useRecorder, type Recording } from '../voice/useRecorder';
 import { Alert, Badge, Button, Card, cx, Field, Input, PageHeader, Select, Textarea } from '../components/ui';
 
 type Phase = 'input' | 'processing' | 'review' | 'saving' | 'done';
-
-const LANG_LABEL: Record<string, string> = { en: 'English', fr: 'Français', rw: 'Kinyarwanda', other: '—' };
 
 export default function Capture() {
   const { t } = useI18n();
@@ -35,7 +34,8 @@ export default function Capture() {
   const [savedCount, setSavedCount] = useState(0);
 
   const timezone = profile?.timezone ?? browserTimeZone();
-  const hint = profile?.speech_language ?? 'auto';
+  // The user's spoken languages (Settings), sent as recognition hints; empty = automatic detection.
+  const languages = useMemo(() => profile?.speech_languages ?? [], [profile?.speech_languages]);
 
   useEffect(() => { listCategories().then(setCategories).catch(() => undefined); }, []);
 
@@ -59,7 +59,7 @@ export default function Capture() {
     finally { void refreshUsage(); }
   };
 
-  const handleRecording = (rec: Recording | null) => { if (rec) void run(() => processAudio(rec.blob, rec.durationMs, timezone, hint)); };
+  const handleRecording = (rec: Recording | null) => { if (rec) void run(() => processAudio(rec.blob, rec.durationMs, timezone, languages)); };
 
   const startRecording = async () => {
     setError(null);
@@ -68,7 +68,7 @@ export default function Capture() {
   };
 
   const recorderError = useMemo(() => {
-    const map: Record<string, TranslationKey> = { denied: 'capture.micDenied', no_device: 'capture.micMissing', unsupported: 'capture.micUnsupported', too_short: 'capture.tooShort', failed: 'errors.generic' };
+    const map: Record<string, TranslationKey> = { denied: 'capture.micDenied', no_device: 'capture.micMissing', unsupported: 'capture.micUnsupported', insecure: 'capture.micInsecure', busy: 'capture.micBusy', too_short: 'capture.tooShort', failed: 'errors.generic' };
     return recorder.error ? t(map[recorder.error]) : null;
   }, [recorder.error, t]);
 
@@ -131,13 +131,14 @@ export default function Capture() {
           <Card className="h-fit p-5">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-semibold">{t('capture.transcript')}</h2>
-              {result && <Badge tone="accent">{t('capture.detected')}: {LANG_LABEL[result.language] ?? result.language}</Badge>}
+              {result && <Badge tone="accent">{t('capture.detected')}: {languageLabel(result.language === 'other' || result.language === 'none' ? null : result.language)}</Badge>}
             </div>
             <Textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} aria-label={t('capture.transcript')} />
-            {result?.language === 'rw' && <p className="mt-2 text-xs text-amber-700">{t('capture.rwExperimental')}</p>}
+            <p className="mt-2 text-xs text-muted">{t('capture.correctHint')}</p>
+            {result && getLanguage(result.language)?.voice !== 'verified' && <p className="mt-1 text-xs text-amber-700">{t('capture.voiceUnverified')}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" disabled={!transcript.trim() || transcript === result?.transcript || phase === 'saving' || aiBlocked}
-                onClick={() => run(() => processText(transcript, timezone, result?.language ?? hint))}>{t('capture.reprocess')}</Button>
+                onClick={() => run(() => processText(transcript, timezone, result && isKnownLanguage(result.language) ? [result.language] : languages))}>{t('capture.reprocess')}</Button>
               <Button variant="ghost" size="sm" disabled={!transcript.trim() || phase === 'saving'} onClick={saveTranscriptAsNote}>{t('capture.saveAsNote')}</Button>
             </div>
             {result?.warnings.map((w) => <p key={w} className="mt-2 text-xs text-muted">{w}</p>)}
@@ -165,7 +166,7 @@ export default function Capture() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t('capture.title')} subtitle={t('capture.subtitle')} />
-      {usage && <AllowanceBar usage={usage} />}
+      {usage && usage.ai_available && <AllowanceBar usage={usage} />}
       {usage && !usage.ai_available && (
         <div className="mb-4"><Alert kind="info">
           {usage.ai_paused_message || t(usage.ai_mode === 'off' ? 'errors.ai_paused' : 'errors.ai_test_mode')}{' '}
@@ -211,7 +212,6 @@ export default function Capture() {
           {error && <Alert>{error}</Alert>}
         </div>
         <p className="mt-4 max-w-md text-center text-xs text-muted">{t('capture.privacy')}</p>
-        {hint === 'rw' && <p className="mt-1 text-center text-xs text-amber-700">{t('capture.rwExperimental')}</p>}
       </Card>
 
       <div className="mt-6">
@@ -221,7 +221,7 @@ export default function Capture() {
           <Card className="p-5">
             <Textarea value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t('capture.typePlaceholder')} rows={4} maxLength={10000} aria-label={t('capture.typeInstead')} autoFocus />
             <div className="mt-3 flex justify-end">
-              <Button disabled={!typed.trim() || processing || recording || aiBlocked} loading={processing} onClick={() => run(() => processText(typed, timezone, hint))}>{t('capture.process')}</Button>
+              <Button disabled={!typed.trim() || processing || recording || aiBlocked} loading={processing} onClick={() => run(() => processText(typed, timezone, languages))}>{t('capture.process')}</Button>
             </div>
           </Card>
         )}

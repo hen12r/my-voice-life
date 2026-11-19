@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopped' | 'error';
-export type RecorderError = 'denied' | 'no_device' | 'unsupported' | 'too_short' | 'failed';
+export type RecorderError = 'denied' | 'no_device' | 'busy' | 'unsupported' | 'insecure' | 'too_short' | 'failed';
+
+/** Maps getUserMedia errors (incl. legacy Chrome names) to what the user can do about them. */
+export function micErrorFromException(e: unknown): RecorderError {
+  const name = (e as { name?: string })?.name ?? '';
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') return 'denied';
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return 'no_device';
+  // In use by another app (calls, other tabs) or blocked at the operating-system level.
+  if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') return 'busy';
+  if (name === 'NotSupportedError' || name === 'TypeError') return 'unsupported';
+  return 'failed';
+}
 
 /** Fallback only; the real limit comes from the user's plan (mvl_my_usage.max_capture_seconds). */
 export const DEFAULT_MAX_RECORDING_MS = 2 * 60 * 1000;
@@ -54,14 +65,21 @@ export function useRecorder(maxMs: number = DEFAULT_MAX_RECORDING_MS) {
   const start = useCallback(async () => {
     setError(null);
     setHitLimit(false);
+    // Browsers hide the microphone API on non-secure pages (http other than localhost).
+    if (typeof window !== 'undefined' && window.isSecureContext === false) { setError('insecure'); setState('error'); return; }
     if (!supported) { setError('unsupported'); setState('error'); return; }
     setState('requesting');
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch (e) {
+        // Some devices reject the processing constraints: retry with plain audio.
+        if ((e as { name?: string })?.name !== 'OverconstrainedError') throw e;
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
     } catch (e) {
-      const name = (e as DOMException)?.name;
-      setError(name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : name === 'NotFoundError' ? 'no_device' : 'failed');
+      setError(micErrorFromException(e));
       setState('error');
       return;
     }

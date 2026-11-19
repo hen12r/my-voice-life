@@ -1,5 +1,7 @@
 # Google Cloud / Gemini safety setup
 
+> **Update 2026-11-19:** the AI provider is now **OpenAI** (`gpt-transcribe` $0.0045/min + `gpt-6-luna` $0.10/$0.50 per 1M tokens; see [OPENAI_SETUP.md](OPENAI_SETUP.md)). The controls described here (reservation, budgets, kill switch, test mode, ledger) are unchanged and apply to OpenAI; Gemini-specific prices and steps below are historical.
+
 Owner's checklist. **Nothing here has been done for you, and nothing here enables paid billing.** Enabling Gemini paid billing, and adding a real key to the project, both require the owner's explicit approval. Google's console menus change, so if a label below doesn't match exactly, look for the nearest equivalent.
 
 Defence in depth, from fastest to slowest to act:

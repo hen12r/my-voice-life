@@ -19,7 +19,7 @@ function checkMaybe<T>(res: { data: T | null; error: { message: string; code?: s
 
 // ---------------- Profile & settings ----------------
 export const getProfile = async (): Promise<Profile> =>
-  check(await supabase.from('profiles').select('id, display_name, ui_language, speech_language, timezone, daily_briefing_enabled').single());
+  check(await supabase.from('profiles').select('id, display_name, ui_language, speech_language, speech_languages, timezone, daily_briefing_enabled').single());
 
 export const updateProfile = async (id: string, patch: Partial<Omit<Profile, 'id'>>) =>
   check(await supabase.from('profiles').update(patch).eq('id', id).select().single());
@@ -141,18 +141,19 @@ async function callFunction<T>(name: string, body: BodyInit, json: boolean): Pro
   return payload as T;
 }
 
-export function processAudio(blob: Blob, durationMs: number, timezone: string, languageHint: string) {
+/** Sends a recording for transcription + organising. `languages` = the user's spoken languages (hints). */
+export function processAudio(blob: Blob, durationMs: number, timezone: string, languages: string[]) {
   const form = new FormData();
   const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
   form.append('audio', blob, `capture.${ext}`);
   form.append('duration_ms', String(Math.round(durationMs)));
   form.append('timezone', timezone);
-  form.append('language_hint', languageHint);
+  form.append('languages', JSON.stringify(languages));
   return callFunction<ProcessResult>('process-voice', form, false);
 }
 
-export function processText(text: string, timezone: string, languageHint: string) {
-  return callFunction<ProcessResult>('process-voice', JSON.stringify({ text, timezone, language_hint: languageHint }), true);
+export function processText(text: string, timezone: string, languages: string[]) {
+  return callFunction<ProcessResult>('process-voice', JSON.stringify({ text, timezone, languages }), true);
 }
 
 export function deleteAccount() {

@@ -5,7 +5,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
 import { createCategory, deleteAccount, deleteCategory, getSubscription, updateProfile } from '../lib/api';
 import { useCategories } from '../lib/useCategories';
-import type { Profile, SpeechLanguage, Subscription, UiLanguage } from '../lib/types';
+import type { Profile, Subscription, UiLanguage } from '../lib/types';
+import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
 import { browserTimeZone, isValidTimeZone } from '../lib/dates';
 import { supabase } from '../lib/supabase';
 import { Alert, Badge, Button, Card, CardHeader, Field, Input, Modal, PageHeader, Select } from '../components/ui';
@@ -29,6 +30,12 @@ export default function Settings() {
 
   if (!form) return null;
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setForm({ ...form, [k]: v });
+  const spoken = sanitizeSpeechLanguages(form.speech_languages ?? []);
+  const setSpoken = (codes: string[]) => set('speech_languages', sanitizeSpeechLanguages(codes));
+  const uiChoices = interfaceLanguages();
+  // Keep a saved interface language visible even if it has no translation yet.
+  const currentUi = getLanguage(form.ui_language);
+  if (currentUi && !uiChoices.includes(currentUi)) uiChoices.push(currentUi);
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,7 +43,10 @@ export default function Settings() {
     setSaving(true); setStatus(null);
     try {
       const updated = await updateProfile(form.id, {
-        display_name: form.display_name?.trim() || null, ui_language: form.ui_language, speech_language: form.speech_language, timezone: form.timezone,
+        display_name: form.display_name?.trim() || null, ui_language: form.ui_language, timezone: form.timezone,
+        speech_languages: spoken,
+        // Legacy single field kept in step for older clients: 'auto' or the first spoken language.
+        speech_language: spoken[0] ?? 'auto',
       });
       setProfile(updated as Profile);
       setStatus({ kind: 'success', msg: t('settings.saved') });
@@ -68,21 +78,42 @@ export default function Settings() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('settings.language')}>
               <Select value={form.ui_language} onChange={(e) => set('ui_language', e.target.value as UiLanguage)}>
-                <option value="en">English</option>
-                <option value="fr">Français</option>
-              </Select>
-            </Field>
-            <Field label={t('settings.speech')}>
-              <Select value={form.speech_language} onChange={(e) => set('speech_language', e.target.value as SpeechLanguage)}>
-                <option value="auto">{t('settings.speechAuto')}</option>
-                <option value="en">English</option>
-                <option value="fr">Français</option>
-                <option value="rw">Kinyarwanda (experimental)</option>
+                {uiChoices.map((l) => (
+                  <option key={l.code} value={l.code}>{l.nativeName}{l.ui === 'draft' ? ` (${t('settings.uiDraft')})` : ''}</option>
+                ))}
               </Select>
             </Field>
           </div>
+          <Field label={t('settings.speech')} hint={t('settings.speechHint')}>
+            <div className="space-y-2">
+              {spoken.length > 0 && (
+                <ul className="flex flex-wrap gap-2">
+                  {spoken.map((code) => {
+                    const l = getLanguage(code)!;
+                    return (
+                      <li key={code} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
+                        <span dir={l.direction}>{l.nativeName}</span>
+                        <Badge tone={l.voice === 'verified' ? 'ok' : 'warn'}>{t(`settings.voice.${l.voice}`)}</Badge>
+                        <button type="button" onClick={() => setSpoken(spoken.filter((c) => c !== code))} className="rounded-full p-0.5 text-muted hover:bg-canvas hover:text-red-600"
+                          aria-label={`${t('settings.removeLanguage')} ${l.nativeName}`}><X className="size-3.5" /></button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {spoken.length === 0 && <p className="text-sm text-muted">{t('settings.speechAuto')}</p>}
+              {spoken.length < MAX_SPEECH_LANGUAGES && (
+                <Select value="" onChange={(e) => e.target.value && setSpoken([...spoken, e.target.value])} aria-label={t('settings.addLanguage')}>
+                  <option value="">{t('settings.addLanguage')}</option>
+                  {LANGUAGES.filter((l) => !spoken.includes(l.code)).map((l) => (
+                    <option key={l.code} value={l.code}>{l.nativeName} — {l.name} ({t(`settings.voice.${l.voice}`)})</option>
+                  ))}
+                </Select>
+              )}
+            </div>
+          </Field>
           <Field label={t('settings.timezone')}>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input value={form.timezone} onChange={(e) => set('timezone', e.target.value)} placeholder="Africa/Kigali" />
               <Button type="button" variant="secondary" onClick={() => set('timezone', browserTimeZone())} className="shrink-0">{t('settings.useBrowserTz')}</Button>
             </div>

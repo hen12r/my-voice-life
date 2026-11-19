@@ -25,6 +25,8 @@ run_test mvl_test supabase/tests/rls_test.sql
 
 run_test mvl_test supabase/tests/financial_test.sql
 
+run_test mvl_test supabase/tests/openai_multilingual_test.sql
+
 echo "== Scenario: concurrent requests cannot bypass limits or budgets"
 reset_db mvl_test
 migrate mvl_test

@@ -1,11 +1,15 @@
-export type UiLanguage = 'en' | 'fr' | 'rw';
-export type SpeechLanguage = 'auto' | 'en' | 'fr' | 'rw';
+/** ISO 639 code. Which codes exist and how well each is supported: supabase/functions/_shared/languages.ts */
+export type UiLanguage = string;
+/** 'auto' or an ISO 639 code (legacy single choice; speech_languages is the full list). */
+export type SpeechLanguage = string;
 
 export interface Profile {
   id: string;
   display_name: string | null;
   ui_language: UiLanguage;
   speech_language: SpeechLanguage;
+  /** Up to 3 languages the user speaks, sent to transcription as hints. Empty = automatic. */
+  speech_languages: string[];
   timezone: string;
   daily_briefing_enabled: boolean;
 }
