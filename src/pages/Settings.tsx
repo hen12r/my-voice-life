@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
+import { LogOut, Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
 import { createCategory, deleteAccount, deleteCategory, getSubscription, updateProfile } from '../lib/api';
@@ -14,7 +14,7 @@ import { Alert, Badge, Button, Card, CardHeader, Field, Input, Modal, PageHeader
 
 export default function Settings() {
   const { t } = useI18n();
-  const { profile, setProfile, session, usage, refreshUsage } = useAuth();
+  const { profile, setProfile, session, usage, refreshUsage, signOut } = useAuth();
   const navigate = useNavigate();
   const { categories, setCategories } = useCategories();
   const [form, setForm] = useState<Profile | null>(profile);
@@ -164,6 +164,9 @@ export default function Settings() {
           <Button variant="secondary" className="text-red-700" onClick={() => setDeleting(true)} icon={<Trash2 className="size-4" />}>{t('settings.deleteAccount')}</Button>
         </div>
       </Card>
+
+      {/* Sign out is here so it is reachable on phones (the sidebar is desktop-only). */}
+      <Button variant="secondary" className="w-full" icon={<LogOut className="size-4" />} onClick={async () => { await signOut(); navigate('/'); }}>{t('nav.signout')}</Button>
 
       {deleting && <DeleteAccount onClose={() => setDeleting(false)} onDeleted={async () => { await supabase.auth.signOut(); navigate('/'); }} />}
     </div>
