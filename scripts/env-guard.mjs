@@ -1,6 +1,11 @@
 // Shared by vite.config.ts (build guard), scripts/check-env.mjs and tests.
 // Only these two variables may ever be exposed to the browser.
 export const ALLOWED_PUBLIC_VARS = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY'];
+// Vercel injects its own non-secret build metadata with the framework prefix
+// (e.g. VITE_VERCEL_GIT_COMMIT_SHA, VITE_VERCEL_OBSERVABILITY_CLIENT_CONFIG), even when
+// "automatically expose system environment variables" is off. These names are tolerated,
+// but their values still go through the secret check below.
+export const TOLERATED_PUBLIC_PREFIX = 'VITE_VERCEL_';
 
 /** @param {string} value */
 export function looksSecret(value) {
@@ -28,7 +33,7 @@ export function findPublicEnvProblems(env) {
   const problems = [];
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith('VITE_')) continue;
-    if (!ALLOWED_PUBLIC_VARS.includes(key)) problems.push(`${key} is not an allowed public variable`);
+    if (!ALLOWED_PUBLIC_VARS.includes(key) && !key.startsWith(TOLERATED_PUBLIC_PREFIX)) problems.push(`${key} is not an allowed public variable`);
     if (value && looksSecret(value)) problems.push(`${key} contains what looks like a secret key`);
   }
   return problems;

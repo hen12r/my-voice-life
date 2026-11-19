@@ -17,6 +17,12 @@ describe('env guard', () => {
     expect(findPublicEnvProblems({ VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_abc' })[0]).toMatch(/secret/);
     expect(findPublicEnvProblems({ VITE_SUPABASE_PUBLISHABLE_KEY: 'AIzaSyA1234567890abcdefghijklmn' })[0]).toMatch(/secret/);
   });
+  it("tolerates Vercel's own VITE_VERCEL_* metadata, but still rejects secret-looking values there", () => {
+    expect(findPublicEnvProblems({ VITE_VERCEL_GIT_COMMIT_SHA: 'e0150d7', VITE_VERCEL_OBSERVABILITY_CLIENT_CONFIG: '{"a":1}' })).toEqual([]);
+    expect(findPublicEnvProblems({ VITE_VERCEL_SNEAKY: 'sb_secret_abc' })[0]).toMatch(/secret/);
+    expect(findPublicEnvProblems({ VITE_VERCELX: 'x' })).toHaveLength(1);
+    expect(findPublicEnvProblems({ VITE_GEMINI_API_KEY: '' })).toHaveLength(1);
+  });
   it('ignores non-VITE variables (server secrets are allowed to exist in the build env)', () => {
     expect(findPublicEnvProblems({ GEMINI_API_KEY: 'AIzaSyA1234567890abcdefghijklmn' })).toEqual([]);
   });
