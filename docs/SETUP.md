@@ -26,6 +26,8 @@ Without `.env.local`, the app shows a "Connect Supabase" screen instead of crash
 | `npm run build` | production build (refuses to build if a `VITE_*` variable looks like a secret) |
 | `npm run test:db` | applies the migration to a **throwaway local** Postgres in three scenarios (fresh, simulated FitPick, conflicting table) and runs 51 checks. Needs `PGHOST/PGPORT/PGUSER` for a local server. Never point it at a real project |
 | `npx deno@2.1.4 check supabase/functions/process-voice/index.ts supabase/functions/delete-account/index.ts` | Edge Function types |
+| `npm run test:functions` | 17 Deno tests of the `process-voice` cost-control flow (no network, no key) |
+| GitHub Actions (`.github/workflows/ci.yml`) | runs all of the above on GitHub for every push and pull request |
 
 ## Security reminders
 - The old FitPick build injected the Gemini key into the browser bundle. If FitPick was ever deployed or the key shared, **rotate that key** in Google AI Studio.
