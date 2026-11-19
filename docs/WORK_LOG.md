@@ -57,5 +57,14 @@ Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the o
   - browser end-to-end runs: tester success, mic denied, mic in use, non-staff, provider busy, Settings languages, Google redirect.
 - **Not done (needs the owner or adult):** OpenAI account, credits and key; migrations; function deploy; tester row; Google credentials; real-phone and native-speaker tests.
 
+## 2026-11-19 — Auth fixes, signature microphone, beta readiness (branch `claude/openai-voice`)
+- `34d6d16`: actionable sign-in errors (14 codes, en/fr), resend confirmation, existing-email detection, expired-link handling, password show/hide, mobile sign-out. 8 browser scenarios (mocked).
+- `5ceccf5`: signature microphone. The orb and waveform follow the real AnalyserNode level, proven with a fake-microphone file (levels 0/0.29/0.05/0). Honest stages from real XHR upload progress. Animated review cards with edit, reject and undo. Optional sound cues; reduced motion.
+- `5bad18a`: task completion feedback; PWA PNG icons; every page checked at 360 px and desktop with 0 console errors.
+- Login diagnosis (read-only auth logs): two accounts, one unconfirmed. No code bug; no account changed.
+- Reports: `PRIVATE_BETA_READINESS_REPORT.md`, `APPROVAL_CHECKLIST.md`.
+- Tests: 105 unit, 27 Deno, 160 DB; typecheck and build pass.
+- **Awaiting approval:** migrations 3–4, tester row, function deploy, OpenAI key (adult), Google credentials.
+
 ## Earlier milestones
 See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.

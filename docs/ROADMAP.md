@@ -18,9 +18,9 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Extraction validator (no invented dates, bounded output) | ✅ | 11 unit tests |
 | Time-zone conversion and recurrence math | ✅ | 8 unit tests (Kigali, Paris DST, Toronto) |
 | Proposal → record mapping, priority ranking | ✅ | 8 unit tests |
-| `process-voice` Edge Function (auth, rate limit, Gemini transcribe + extract) | 🟡 | `deno check` passes; **not run against real Gemini/Supabase yet** |
+| `process-voice` Edge Function (auth, reservation, OpenAI transcribe + extract) | 🟡 | `deno check` + 27 Deno tests; **not deployed; not run against real OpenAI/Supabase yet** |
 | `delete-account` Edge Function | 🟡 | `deno check` passes; not run against real Supabase |
-| Auth: register, login, logout, password reset, persistent session | 🟡 | UI built; needs a live Supabase project to verify |
+| Auth: register, login, logout, password reset, persistent session | ✅ live / 🟡 reset | real sign-ups and sign-ins on the live project from the previews (auth logs, 2026-11-19); 8 mocked browser scenarios incl. wrong password, unconfirmed email, existing email, expired link, resend; password reset tested mocked only |
 | Pages: Landing, Dashboard, Capture/Review, Notes, Tasks, Schedule, Memory, Settings | 🟡 | render-tested with mocked data; CRUD needs a live project |
 | Recorder: duration, cancel, max length, permission-denied handling | 🟡 | denied-permission path tested in Chromium; real recording needs a device mic |
 | en/fr interface | ✅ | all keys typed and present in both |
@@ -33,7 +33,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 ### Financial controls (approved 2026-11-18; local only, not applied)
 | Item | Status | Evidence |
 |---|---|---|
-| Migration `20261118000002_mvl_financial_controls.sql` (ledger, limits, budgets, kill switch, admin RPCs) | ✅ prepared + tested locally / ⬜ not applied | 82 new DB checks; whole suite 130 checks |
+| Migration `20261118000002_mvl_financial_controls.sql` (ledger, limits, budgets, kill switch, admin RPCs) | ✅ tested locally + applied (owner-approved) | 82 new DB checks; whole suite 130 checks |
 | Free 7 AI captures/month; manual notes unlimited; deleting records never restores allowance | ✅ | DB tests |
 | Premium 300 captures **and** 600 audio minutes, enforced independently; configurable without code | ✅ | DB tests |
 | Per-hour/per-day rate limits counted from the ledger (not user-deletable rows) | ✅ | DB tests |
@@ -86,3 +86,16 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 5c. Admin → set the daily budget just above today's spend → new captures stop with the budget message; an alert appears and the webhook (if set) fires.
 6. Second account in a private window: none of the first account's data is visible, including in Memory search.
 7. Settings → delete account → you're signed out, and logging in again fails.
+
+## Interface and motion (2026-11-19)
+| Item | Status | Evidence |
+|---|---|---|
+| Signature microphone orb reacting to the real input level (AnalyserNode RMS) | ✅ desktop Chromium / 🟡 phones | fake-microphone file with silence/loud/quiet/silence → measured levels 0 / 0.29 / 0.05 / 0; real phones not tested |
+| Live waveform from real level history, shown only while recording | ✅ | same test; hidden in every other state |
+| Honest processing stages (upload % from real XHR progress, then "Understanding…") | ✅ | browser test with mocked backend; percentage hidden when the browser reports none |
+| Review cards: staggered entrance, edit, reject + undo | ✅ | browser test (accept/edit/reject/undo, save) |
+| Optional sound cues (off by default) | ✅ | unit tests; toggle in Settings |
+| Reduced motion | ✅ | emulated `prefers-reduced-motion: reduce`: no breathing, rings or stagger |
+| Task completion feedback | ✅ | browser test |
+| PWA icons (PNG 192/512/maskable, apple-touch) | ✅ files / ⬜ install | manifest served; home-screen install not tested on a phone |
+
