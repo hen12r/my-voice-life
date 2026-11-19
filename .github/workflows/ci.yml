@@ -1,0 +1,61 @@
+# Runs every test suite on GitHub's servers for pull requests and pushes to feature branches.
+# Free within GitHub's included Actions minutes for private repos; a run takes a few minutes.
+# To pause it: GitHub → repository → Actions → "CI" → ⋯ → Disable workflow.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ['claude/**', 'main']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      # Dummy public values so the production build runs; no real project or secret is used in CI.
+      VITE_SUPABASE_URL: https://abcdefghijklmnopqrst.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.4
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build (secret guard active)
+        run: npm run build
+      - name: Build refuses a secret in VITE_* (guard self-test)
+        run: |
+          if VITE_GEMINI_API_KEY=should-fail npm run build; then echo "guard did not refuse"; exit 1; fi
+      - name: Edge Function type check
+        run: deno check supabase/functions/process-voice/index.ts supabase/functions/delete-account/index.ts
+      - name: Edge Function orchestration tests
+        run: deno test --allow-env supabase/functions/process-voice/
+      - name: Database tests (migrations, RLS, financial controls, concurrency)
+        run: bash scripts/test-db.sh

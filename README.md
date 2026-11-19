@@ -1,11 +1,23 @@
-<div align="center">
+# My Voice Life
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+**Your voice. Your ideas. Your organised life.**
 
-  <h1>Built with AI Studio</h2>
+Speak once. My Voice Life turns what you said into separate tasks, reminders, events and notes. You review every item before it's saved, then find any of it again in your personal memory.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- Voice or typed capture → AI proposals → you confirm → saved
+- Never invents dates. Ambiguous ones must be chosen by you
+- Private by design: Row Level Security on every table, audio never stored
+- English and French interface; Kinyarwanda speech is experimental
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+**Status:** early development. See [docs/ROADMAP.md](docs/ROADMAP.md) for what is done and verified.
 
-</div>
+## Quick start
+```bash
+npm install
+cp .env.example .env.local   # add your Supabase URL + publishable key
+npm run dev
+```
+Local setup: [docs/SETUP.md](docs/SETUP.md) · Deploying: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · Migration review: [docs/MIGRATION_REVIEW.md](docs/MIGRATION_REVIEW.md) · Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Strategy: [docs/PRODUCT.md](docs/PRODUCT.md) · Kinyarwanda testing: [docs/kinyarwanda/TEST_PLAN.md](docs/kinyarwanda/TEST_PLAN.md)
+
+## Tests
+`npm test` · `npm run typecheck` · `npm run test:db` (local Postgres only)
