@@ -75,5 +75,23 @@ Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the o
 - **Tests:** DB billing suite and rollback; 41 new Deno tests (68 in total); Vitest 134+; 11 mocked browser scenarios; mutation checks.
 - **Not done:** no Stripe account was created or accessed; nothing deployed; no migration applied; no secret set.
 
+## 2026-11-20 — Owner-approved changes applied to Supabase `nwglzabnezhmxfyuxhmg`
+The owner explicitly approved all four steps ("Attaque", then selected each one).
+- **Migrations 3, 4 and 5 applied verbatim.** History aligned to `20261119000001`, `20261119000002` and `20261120000001`.
+  - Verified read-only: the 2 OpenAI price rows; the new columns and constraints; none of the elevated functions can be run by visitors or signed-in users; profiles unchanged (spoken languages `[]`); notes 2 and tasks 1 on the owner's account; 2 subscription rows unchanged; ledger empty with RLS on.
+  - Security advisor: only the intended deny-all and admin-RPC notes.
+- **Tester access:** 1 row in `mvl_staff` (role `tester`) for the confirmed owner account. Checked as that user: `is_staff` true, `is_admin` false, `mvl_is_admin()` false. `ai_mode` stays `admins_only`.
+- **Edge Functions deployed, version 1, all ACTIVE:**
+  - `process-voice`: JWT check on;
+  - `billing`: JWT check off by design; checks the user itself;
+  - `stripe-webhook`: JWT check off by design; checks Stripe's signature;
+  - `delete-account`: JWT check on.
+- **No secrets added.** Without them: voice answers `ai_not_configured`, billing reports "not configured", the webhook returns 503.
+- **Not verified:** HTTP calls to the live functions. This session's network proxy blocks the Supabase host.
+- **Still needed:**
+  - `ALLOWED_ORIGINS` (the preview origin) for browser calls to the functions;
+  - an OpenAI key (adult);
+  - Stripe test secrets (adult).
+
 ## Earlier milestones
 See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
