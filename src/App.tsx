@@ -16,9 +16,17 @@ import Memory from './pages/Memory';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import type { UiLanguage } from './lib/types';
+import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
+import { getLanguage } from '../supabase/functions/_shared/languages.ts';
 
+/** First browser language that has an interface translation, else English. */
 function browserLanguage(): UiLanguage {
-  return navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+  const prefs = navigator.languages?.length ? navigator.languages : [navigator.language ?? 'en'];
+  for (const p of prefs) {
+    const code = p.toLowerCase().split('-')[0];
+    if (hasTranslation(code)) return code;
+  }
+  return 'en';
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -44,7 +52,10 @@ function SetupNotice() {
 function Localised({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
   const lang = profile?.ui_language ?? browserLanguage();
-  document.documentElement.lang = lang;
+  // lang/dir follow the language the text is actually shown in (untranslated → English, ltr).
+  const shown = effectiveUiLanguage(lang);
+  document.documentElement.lang = shown;
+  document.documentElement.dir = getLanguage(shown)?.direction ?? 'ltr';
   return <I18nProvider lang={lang}>{children}</I18nProvider>;
 }
 

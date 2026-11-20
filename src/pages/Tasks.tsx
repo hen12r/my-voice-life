@@ -24,15 +24,25 @@ export default function Tasks() {
   useEffect(() => { listTasks().then(setTasks).catch((e) => setError(errorMessage(t, e))); }, [t]);
 
   const replace = (u: Task) => setTasks((prev) => prev!.map((x) => (x.id === u.id ? u : x)));
+  // Tasks just completed stay visible briefly (with a check animation) so the tap has visible
+  // feedback before the task moves to the Done tab.
+  const [justDone, setJustDone] = useState<Set<string>>(new Set());
   const toggle = async (task: Task) => {
-    try { replace(await updateTask(task.id, { status: task.status === 'open' ? 'done' : 'open' })); } catch (e) { setError(errorMessage(t, e)); }
+    try {
+      const updated = await updateTask(task.id, { status: task.status === 'open' ? 'done' : 'open' });
+      if (updated.status === 'done') {
+        setJustDone((s) => new Set(s).add(updated.id));
+        window.setTimeout(() => setJustDone((s) => { const n = new Set(s); n.delete(updated.id); return n; }), 900);
+      }
+      replace(updated);
+    } catch (e) { setError(errorMessage(t, e)); }
   };
   const remove = async (task: Task) => {
     if (!confirm(t('common.confirmDelete'))) return;
     try { await deleteTask(task.id); setTasks((prev) => prev!.filter((x) => x.id !== task.id)); } catch (e) { setError(errorMessage(t, e)); }
   };
 
-  const shown = (tasks ?? []).filter((x) => x.status === tab);
+  const shown = (tasks ?? []).filter((x) => x.status === tab || (tab === 'open' && justDone.has(x.id)));
   const closeEditor = () => { setEditing(null); if (params.get('new')) setParams({}, { replace: true }); };
   return (
     <div>
@@ -56,7 +66,7 @@ export default function Tasks() {
                 return (
                   <li key={task.id} className="flex items-start gap-3 px-4 py-3">
                     <button onClick={() => toggle(task)} className="mt-0.5 text-muted hover:text-accent-600" aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')}>
-                      {task.status === 'done' ? <CheckCircle2 className="size-5 text-emerald-600" /> : <Circle className="size-5" />}
+                      {task.status === 'done' ? <CheckCircle2 className={cx('size-5 text-emerald-600', justDone.has(task.id) && 'animate-pop')} /> : <Circle className="size-5" />}
                     </button>
                     <div className="min-w-0 flex-1">
                       <p className={cx('text-sm', task.status === 'done' && 'text-muted line-through')}>{task.title}</p>

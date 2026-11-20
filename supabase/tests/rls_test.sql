@@ -56,7 +56,7 @@ select pg_temp.expect_error($$update public.usage_counters set notes_created = 0
   'A cannot reset usage counters');
 update public.profiles set timezone = 'Africa/Kigali', ui_language = 'fr';
 select pg_temp.expect((select timezone = 'Africa/Kigali' from public.profiles), 'A can update own preferences');
-select pg_temp.expect_error($$update public.profiles set ui_language = 'xx'$$, 'invalid language rejected');
+select pg_temp.expect_error($$update public.profiles set ui_language = 'English!'$$, 'invalid language code rejected');
 reset role;
 
 -- ---------- User B tries to reach A's data ----------

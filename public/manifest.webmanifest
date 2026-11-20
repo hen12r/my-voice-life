@@ -3,8 +3,15 @@
   "short_name": "Voice Life",
   "description": "Your voice. Your ideas. Your organised life.",
   "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f7f7fb",
+  "orientation": "portrait",
+  "background_color": "#f6f6fa",
   "theme_color": "#0b1230",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
 }

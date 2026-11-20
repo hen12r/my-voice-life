@@ -1,5 +1,7 @@
 # Financial control architecture (PROPOSAL)
 
+> **Update 2026-11-19:** the AI provider is now **OpenAI** (`gpt-transcribe` $0.0045/min + `gpt-6-luna` $0.10/$0.50 per 1M tokens; see [OPENAI_SETUP.md](OPENAI_SETUP.md)). The controls described here (reservation, budgets, kill switch, test mode, ledger) are unchanged and apply to OpenAI; Gemini-specific prices and steps below are historical.
+
 **Status: approved 2026-11-18 and implemented locally** in `supabase/migrations/20261118000002_mvl_financial_controls.sql`, `supabase/functions/process-voice`, `src/pages/Admin.tsx`. **Not applied to any live database.** The SQL sketch below is the design; the migration file is authoritative (it adds `mvl_staff` with admin/tester roles, worst-case cost holds and reservation expiry). It extends the existing schema additively, following the same rules as the core migration: owner-only RLS, service-role-only writes for money and usage data, collision-proof names, tested before review.
 
 ## Goals → design

@@ -4,6 +4,10 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { getMyUsage, getProfile, touchActivity } from '../lib/api';
 import type { MyUsage, Profile } from '../lib/types';
 import { browserTimeZone } from '../lib/dates';
+import { consumeAuthLinkError, type AuthLinkError } from './authLink';
+
+// Read before supabase-js and the router touch the URL.
+const initialLinkError = consumeAuthLinkError();
 
 interface AuthValue {
   session: Session | null;
@@ -17,6 +21,9 @@ interface AuthValue {
   refreshUsage: () => Promise<void>;
   setProfile: (p: Profile) => void;
   signOut: () => Promise<void>;
+  /** Error from a failed email/OAuth link (expired, already used, denied), shown on the auth pages. */
+  linkError: AuthLinkError | null;
+  clearLinkError: () => void;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -27,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [recovering, setRecovering] = useState(false);
   const [usage, setUsage] = useState<MyUsage | null>(null);
+  const [linkError, setLinkError] = useState<AuthLinkError | null>(initialLinkError);
 
   const refreshUsage = useCallback(async () => {
     try { setUsage(await getMyUsage()); } catch (e) { console.error('Could not load usage', e); }
@@ -75,6 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUsage,
     setProfile,
     signOut: async () => { await supabase.auth.signOut(); },
+    linkError,
+    clearLinkError: () => setLinkError(null),
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

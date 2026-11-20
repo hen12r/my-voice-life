@@ -67,7 +67,7 @@ if (!failed) {
     else if (res.status === 404) bad('process-voice is not deployed');
     else bad(`Unauthenticated call returned HTTP ${res.status} — expected 401`);
   } catch (e) { bad(`Function auth probe failed: ${e.message}`); }
-  warn('GEMINI_API_KEY cannot be checked from here (it is server-only). Verify by recording in the app: an "ai_not_configured" error means it is missing.');
+  warn('OPENAI_API_KEY cannot be checked from here (it is server-only). Verify by recording in the app: an "ai_not_configured" error means it is missing.');
 }
 
 console.log(failed ? `\n${failed} problem(s) found.` : '\nAll checks passed.');

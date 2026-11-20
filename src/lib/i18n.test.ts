@@ -1,13 +1,22 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { errorMessage, translate, type TranslationKey } from './i18n';
+import { effectiveUiLanguage, errorMessage, hasTranslation, localeFor, translate, type TranslationKey } from './i18n';
 import { REFUSAL_STATUS } from '../../supabase/functions/_shared/usage.ts';
 
-// Every error code the backend can return (process-voice handler + refusal reasons).
-const HANDLER_CODES = ['ai_not_configured', 'unauthorized', 'no_audio', 'empty_audio', 'audio_too_long', 'unsupported_audio',
-  'no_text', 'no_speech', 'ai_unavailable', 'accounting_unavailable', 'ai_busy', 'ai_rejected_input', 'ai_timeout', 'internal'];
-const ALL_CODES = [...new Set([...HANDLER_CODES, ...Object.keys(REFUSAL_STATUS)])].filter((c) => c !== 'no_text'); // no_text cannot reach users (UI disables empty submit)
+// Every error code the backend can return: read from the handler's source so the list cannot
+// drift, plus the refusal reasons from the usage controls.
+const handlerSource = readFileSync(new URL('../../supabase/functions/process-voice/handler.ts', import.meta.url), 'utf8');
+const HANDLER_CODES = [...handlerSource.matchAll(/(?:fail\(req, \d+|InputError\(\d+), '([a-z_]+)'/g)].map((m) => m[1]);
+// Not reachable from the app: the UI never sends empty text, and always uses POST.
+const UNREACHABLE = ['no_text', 'method_not_allowed'];
+const ALL_CODES = [...new Set([...HANDLER_CODES, ...Object.keys(REFUSAL_STATUS)])].filter((c) => !UNREACHABLE.includes(c));
 
 describe('error messages', () => {
+  it('finds the handler codes (sanity check of the extraction)', () => {
+    expect(HANDLER_CODES).toContain('ai_not_configured');
+    expect(HANDLER_CODES).toContain('unsupported_audio');
+    expect(HANDLER_CODES.length).toBeGreaterThan(12);
+  });
   it('every backend error code has an English and a French message', () => {
     const missing = ALL_CODES.filter((c) => !translate('en', `errors.${c}` as TranslationKey) || !translate('fr', `errors.${c}` as TranslationKey));
     expect(missing).toEqual([]);
@@ -26,3 +35,22 @@ describe('error messages', () => {
     expect(errorMessage(t, new Error('x'.repeat(500)))).toBe(translate('en', 'errors.generic'));
   });
 });
+
+describe('interface language fallback (languages without a translation)', () => {
+  it('shows English text for a valid but untranslated language (sw, rw, zh-cn)', () => {
+    for (const lang of ['sw', 'rw', 'zh-cn']) {
+      expect(hasTranslation(lang)).toBe(false);
+      expect(effectiveUiLanguage(lang)).toBe('en');
+      expect(translate(lang, 'nav.capture' as TranslationKey)).toBe(translate('en', 'nav.capture' as TranslationKey));
+    }
+  });
+  it('shows English for a code the app has never heard of, and uses a safe default locale', () => {
+    expect(effectiveUiLanguage('xx')).toBe('en');
+    expect(translate('xx', 'nav.capture' as TranslationKey)).toBe(translate('en', 'nav.capture' as TranslationKey));
+    expect(localeFor('xx')).toBe('en-GB');
+  });
+  it('keeps French when French is chosen', () => {
+    expect(effectiveUiLanguage('fr')).toBe('fr');
+  });
+});
+

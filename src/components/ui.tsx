@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes, type CSSProperties } from 'react';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 export function cx(...c: (string | false | null | undefined)[]) { return c.filter(Boolean).join(' '); }
@@ -46,8 +46,8 @@ export function Field({ label, hint, children, htmlFor }: { label: string; hint?
   );
 }
 
-export function Card({ className, children, as: Tag = 'section' }: { className?: string; children: ReactNode; as?: 'section' | 'div' | 'li' | 'article' }) {
-  return <Tag className={cx('rounded-2xl border border-line bg-surface', className)}>{children}</Tag>;
+export function Card({ className, children, style, as: Tag = 'section' }: { className?: string; children: ReactNode; style?: CSSProperties; as?: 'section' | 'div' | 'li' | 'article' }) {
+  return <Tag className={cx('rounded-2xl border border-line bg-surface', className)} style={style}>{children}</Tag>;
 }
 
 export function CardHeader({ title, action, icon }: { title: string; action?: ReactNode; icon?: ReactNode }) {

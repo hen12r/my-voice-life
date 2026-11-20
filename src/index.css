@@ -32,6 +32,80 @@
 .animate-pulse-ring { animation: pulse-ring 1.6s cubic-bezier(.2,.6,.4,1) infinite; }
 @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .animate-fade-up { animation: fade-up .25s ease-out both; }
+/* ---------------------------------------------------------------------------
+   Motion system. Durations: 150–300 ms for UI, longer only for ambient idle states.
+   Only transform/opacity are animated (GPU-friendly). Everything respects
+   prefers-reduced-motion (see the block at the end).
+   --------------------------------------------------------------------------- */
+:root {
+  --ease-out: cubic-bezier(.2, .7, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+}
+@keyframes card-in { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+.animate-card-in { animation: card-in .28s var(--ease-out) both; }
+@keyframes pop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+.animate-pop { animation: pop .28s var(--ease-spring) both; }
+@keyframes shimmer-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.press { transition: transform .15s var(--ease-out); }
+.press:active { transform: scale(.97); }
+
+/* ---- Signature microphone (VoiceOrb) ----
+   --lvl (0..1) is written by JS from the REAL microphone level while recording; it is 0
+   otherwise. Idle "breathing" is a slow ambient loop, paused when AI is unavailable. */
+.orb { --lvl: 0; position: relative; display: grid; place-items: center; width: 13rem; height: 13rem; }
+.orb-glow {
+  position: absolute; inset: 1.25rem; border-radius: 9999px; pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, rgba(139,108,255,.55), rgba(76,110,245,.28) 45%, transparent 70%);
+  filter: blur(18px);
+  opacity: calc(.45 + var(--lvl) * .55);
+  transform: scale(calc(1 + var(--lvl) * .35));
+  transition: opacity .12s linear, transform .12s linear;
+}
+.orb-ring {
+  position: absolute; border-radius: 9999px; pointer-events: none;
+  border: 1.5px solid rgba(139,108,255,.35);
+  transition: transform .1s linear, opacity .2s var(--ease-out);
+}
+.orb-ring-1 { inset: 2.6rem; transform: scale(calc(1 + var(--lvl) * .16)); }
+.orb-ring-2 { inset: 1.7rem; border-color: rgba(139,108,255,.22); transform: scale(calc(1 + var(--lvl) * .26)); }
+.orb-ring-3 { inset: .8rem;  border-color: rgba(108,140,255,.14); transform: scale(calc(1 + var(--lvl) * .38)); }
+.orb-core {
+  position: relative; display: grid; place-items: center; width: 7rem; height: 7rem; border-radius: 9999px; color: #fff;
+  background: radial-gradient(circle at 35% 30%, #2a3580 0%, var(--color-navy-900) 55%, var(--color-navy-950) 100%);
+  box-shadow: 0 18px 40px -12px rgba(11,18,48,.55), inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 1px rgba(139,108,255,.25);
+  transform: scale(calc(1 + var(--lvl) * .06));
+  transition: transform .1s linear, background .3s var(--ease-out), box-shadow .3s var(--ease-out), width .3s var(--ease-out), height .3s var(--ease-out);
+}
+.orb-core:hover { box-shadow: 0 22px 46px -12px rgba(11,18,48,.6), inset 0 1px 0 rgba(255,255,255,.14), 0 0 0 1px rgba(139,108,255,.45), 0 0 28px rgba(139,108,255,.35); }
+.orb-core:active { transform: scale(.96); }
+.orb-core:focus-visible { outline: 3px solid var(--color-accent-400); outline-offset: 6px; }
+@keyframes orb-breathe { 0%, 100% { transform: scale(1); opacity: .45; } 50% { transform: scale(1.06); opacity: .75; } }
+@keyframes orb-breathe-ring { 0%, 100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.04); opacity: .55; } }
+.orb[data-mode="idle"] .orb-glow { animation: orb-breathe 4s ease-in-out infinite; }
+.orb[data-mode="idle"] .orb-ring-2 { animation: orb-breathe-ring 4s ease-in-out infinite; }
+.orb[data-mode="recording"] .orb-core { background: radial-gradient(circle at 35% 30%, #8f74ff 0%, var(--color-accent-600) 50%, var(--color-accent-700) 100%); }
+.orb[data-mode="recording"] .orb-ring { border-color: rgba(139,108,255,.55); }
+.orb[data-mode="requesting"] .orb-core { opacity: .85; }
+.orb[data-mode="disabled"] .orb-core { background: #6b6f88; box-shadow: none; cursor: not-allowed; }
+.orb[data-mode="disabled"] .orb-glow, .orb[data-mode="disabled"] .orb-ring { opacity: .15; }
+/* Processing: the orb settles and a soft light sweeps across it while the request is running. */
+.orb[data-mode="thinking"] .orb-core, .orb[data-mode="uploading"] .orb-core { width: 5.5rem; height: 5.5rem; overflow: hidden; }
+.orb[data-mode="thinking"] .orb-core::after, .orb[data-mode="uploading"] .orb-core::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(100deg, transparent 20%, rgba(162,139,255,.55) 50%, transparent 80%);
+  animation: shimmer-sweep 1.6s ease-in-out infinite;
+}
+.orb[data-mode="thinking"] .orb-ring, .orb[data-mode="uploading"] .orb-ring { opacity: .35; }
+.orb[data-mode="thinking"] .orb-glow { animation: orb-breathe 2.4s ease-in-out infinite; }
+
+/* Live waveform: bar heights are the real level history (scaleY written by JS). */
+.wave { display: flex; align-items: center; justify-content: center; gap: 3px; height: 2.75rem; }
+.wave-bar { width: 3px; height: 100%; border-radius: 9999px; background: linear-gradient(var(--color-accent-400), var(--color-accent-600)); transform: scaleY(.06); transform-origin: center; transition: transform .08s linear; }
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse-ring, .animate-fade-up { animation: none; }
+  .animate-pulse-ring, .animate-fade-up, .animate-card-in, .animate-pop { animation: none; }
+  .orb-glow, .orb-ring, .orb-core, .orb[data-mode] .orb-glow, .orb[data-mode] .orb-ring-2 { animation: none !important; transform: none !important; transition: none; }
+  .orb[data-mode="thinking"] .orb-core::after, .orb[data-mode="uploading"] .orb-core::after { animation: none; opacity: .4; }
+  .wave-bar { transition: none; }
+  .press:active { transform: none; }
 }

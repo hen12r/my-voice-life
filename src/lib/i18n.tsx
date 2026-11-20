@@ -1,9 +1,11 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { UiLanguage } from './types';
+import { getLanguage } from '../../supabase/functions/_shared/languages.ts';
 
-// English is the source of truth. French is complete for every key below.
-// Kinyarwanda UI strings are intentionally NOT machine-generated: they need a native
-// speaker's review before shipping, so 'rw' currently falls back to English.
+// English is the source of truth. French is complete for every key below (draft: awaiting a
+// native speaker's review). Other interface languages are listed in the language registry
+// (supabase/functions/_shared/languages.ts) and fall back to English until a translation exists.
+// Translations are intentionally NOT machine-generated: they need a fluent speaker's review.
 const en = {
   'app.name': 'My Voice Life',
   'app.tagline': 'Your voice. Your ideas. Your organised life.',
@@ -35,6 +37,9 @@ const en = {
   'auth.password': 'Password',
   'auth.name': 'Your name',
   'auth.forgot': 'Forgot password?',
+  'auth.google': 'Continue with Google',
+  'auth.or': 'or',
+  'auth.googleUnavailable': 'Google sign-in is not set up yet. Please use email and password for now.',
   'auth.noAccount': 'New here? Create an account',
   'auth.haveAccount': 'Already have an account? Sign in',
   'auth.resetTitle': 'Reset your password',
@@ -43,8 +48,13 @@ const en = {
   'auth.newPassword': 'New password',
   'auth.updatePassword': 'Update password',
   'auth.passwordUpdated': 'Password updated.',
-  'auth.checkEmail': 'Check your inbox to confirm your email, then sign in.',
+  'auth.checkEmail': 'Check your inbox (and spam folder) and open the confirmation link. Then sign in with the same email.',
   'auth.passwordHint': 'At least 8 characters.',
+  'auth.resendConfirmation': 'Resend confirmation email',
+  'auth.confirmationResent': 'Confirmation email sent. Check your inbox and your spam folder.',
+  'auth.showPassword': 'Show password',
+  'auth.hidePassword': 'Hide password',
+  'auth.requestNewLink': 'Request a new link',
   'dash.greeting.morning': 'Good morning',
   'dash.greeting.afternoon': 'Good afternoon',
   'dash.greeting.evening': 'Good evening',
@@ -73,6 +83,23 @@ const en = {
   'capture.process': 'Organise this',
   'capture.transcript': 'What you said',
   'capture.reprocess': 'Re-organise edited text',
+  'capture.keeping': 'Keeping',
+  'capture.cancelShort': 'Cancel',
+  'capture.finish': 'Finish',
+  'capture.listening': 'Listening',
+  'capture.allowMic': 'Allow microphone access to start…',
+  'capture.understanding': 'Understanding your thoughts…',
+  'capture.stageUploading': 'Uploading audio',
+  'capture.stageThinking': 'Transcribing and organising your words — usually a few seconds.',
+  'capture.stageOrganising': 'Organising your words…',
+  'capture.tapToSpeak': 'Tap the microphone and speak naturally',
+  'capture.undo': 'Undo',
+  'capture.important': 'Important',
+  'capture.kind': 'Kind',
+  'capture.doneEditing': 'Done',
+  'capture.reject': 'Reject',
+  'settings.sound': 'Sound feedback',
+  'settings.soundHint': 'Short, quiet sounds when recording starts and stops, and when results are ready or saved. Off by default.',
   'capture.detected': 'Detected language',
   'capture.review': 'Review before saving',
   'capture.saveSelected': 'Save selected',
@@ -88,7 +115,10 @@ const en = {
   'capture.tooShort': 'That recording was too short.',
   'capture.maxReached': 'Maximum recording length reached.',
   'capture.privacy': 'Audio is sent for transcription and is not stored. The transcript is kept with your records.',
-  'capture.rwExperimental': 'Kinyarwanda recognition is experimental — check the transcript carefully.',
+  'capture.voiceUnverified': 'Voice recognition for this language has not been tested by us yet — please check the transcript.',
+  'capture.correctHint': 'Correct any transcription mistakes, then re-organise.',
+  'capture.micInsecure': 'The microphone only works on a secure (https) page.',
+  'capture.micBusy': 'The microphone is in use by another app or blocked by your device settings. Close other apps using it, or allow it in your system settings.',
   'type.task': 'Task',
   'type.reminder': 'Reminder',
   'type.event': 'Event',
@@ -142,8 +172,15 @@ const en = {
   'settings.title': 'Settings',
   'settings.profile': 'Profile',
   'settings.language': 'App language',
-  'settings.speech': 'Speaking language',
+  'settings.speech': 'Languages you speak',
   'settings.speechAuto': 'Detect automatically',
+  'settings.speechHint': 'Up to 3. Used as hints for voice recognition, including when you mix languages. Leave empty to detect automatically.',
+  'settings.addLanguage': 'Add a language…',
+  'settings.removeLanguage': 'Remove',
+  'settings.voice.verified': 'tested',
+  'settings.voice.experimental': 'experimental',
+  'settings.voice.unverified': 'not yet tested',
+  'settings.uiDraft': 'translation awaiting review',
   'settings.timezone': 'Time zone',
   'settings.useBrowserTz': 'Use this device’s time zone',
   'settings.saved': 'Settings saved.',
@@ -166,6 +203,20 @@ const en = {
   'errors.ai_timeout': 'The AI service took too long. Try a shorter recording.',
   'errors.audio_too_large': 'That recording is too long.',
   'errors.network': 'Could not reach the server. Check your connection.',
+  'errors.invalid_credentials': 'The email or password is incorrect. Check that you are using the email you signed up with, or reset your password.',
+  'errors.email_not_confirmed': 'Please confirm your email first: open the link we sent you. No email? Resend it below.',
+  'errors.over_email_send_rate_limit': 'Too many emails were sent. Please wait a few minutes, then try again.',
+  'errors.over_request_rate_limit': 'Too many attempts. Please wait a minute, then try again.',
+  'errors.user_already_exists': 'An account with this email already exists. Sign in, or use “Forgot password?”.',
+  'errors.weak_password': 'This password is too weak. Use at least 8 characters with letters and numbers.',
+  'errors.same_password': 'Choose a password different from your current one.',
+  'errors.otp_expired': 'This email link has expired or was already used. Request a new one.',
+  'errors.access_denied': 'Sign-in was cancelled or refused. Please try again.',
+  'errors.auth_link': 'This sign-in link is not valid. Please request a new one.',
+  'errors.provider_email_needs_verification': 'Please confirm your email address with the link we sent, then sign in again.',
+  'errors.email_address_invalid': 'This email address is not valid. Please check it.',
+  'errors.signup_disabled': 'New registrations are closed at the moment.',
+  'errors.session_not_found': 'Your reset link has expired. Please request a new one.',
   'errors.unauthorized': 'Your session expired. Please sign in again.',
   'landing.cta': 'Get started free',
   'landing.signin': 'Sign in',
@@ -198,6 +249,7 @@ const en = {
   'errors.empty_audio': "The recording was empty. Please try again.",
   'errors.no_audio': "No recording was received. Please try again.",
   'errors.internal': "Something went wrong on our side. Your notes are safe; please try again.",
+  'errors.bad_request': 'The recording could not be sent correctly. Please try again.',
   'usage.capturesLeft': 'AI voice captures left this month',
   'usage.minutesLeft': 'audio minutes left',
   'usage.resets': 'Resets',
@@ -321,6 +373,9 @@ const fr: Record<TranslationKey, string> = {
   'auth.password': 'Mot de passe',
   'auth.name': 'Votre nom',
   'auth.forgot': 'Mot de passe oublié ?',
+  'auth.google': 'Continuer avec Google',
+  'auth.or': 'ou',
+  'auth.googleUnavailable': "La connexion Google n'est pas encore configurée. Utilisez l'e-mail et le mot de passe pour l'instant.",
   'auth.noAccount': 'Nouveau ? Créez un compte',
   'auth.haveAccount': 'Déjà un compte ? Connectez-vous',
   'auth.resetTitle': 'Réinitialiser le mot de passe',
@@ -329,8 +384,13 @@ const fr: Record<TranslationKey, string> = {
   'auth.newPassword': 'Nouveau mot de passe',
   'auth.updatePassword': 'Mettre à jour',
   'auth.passwordUpdated': 'Mot de passe mis à jour.',
-  'auth.checkEmail': 'Confirmez votre e-mail depuis votre boîte de réception, puis connectez-vous.',
+  'auth.checkEmail': 'Ouvrez le lien de confirmation reçu par e-mail (vérifiez aussi les spams), puis connectez-vous avec le même e-mail.',
   'auth.passwordHint': 'Au moins 8 caractères.',
+  'auth.resendConfirmation': "Renvoyer l'e-mail de confirmation",
+  'auth.confirmationResent': 'E-mail de confirmation envoyé. Vérifiez votre boîte de réception et vos spams.',
+  'auth.showPassword': 'Afficher le mot de passe',
+  'auth.hidePassword': 'Masquer le mot de passe',
+  'auth.requestNewLink': 'Demander un nouveau lien',
   'dash.greeting.morning': 'Bonjour',
   'dash.greeting.afternoon': 'Bon après-midi',
   'dash.greeting.evening': 'Bonsoir',
@@ -359,6 +419,23 @@ const fr: Record<TranslationKey, string> = {
   'capture.process': 'Organiser',
   'capture.transcript': 'Ce que vous avez dit',
   'capture.reprocess': 'Réorganiser le texte modifié',
+  'capture.keeping': 'Conservées',
+  'capture.cancelShort': 'Annuler',
+  'capture.finish': 'Terminer',
+  'capture.listening': 'Écoute',
+  'capture.allowMic': "Autorisez l'accès au micro pour commencer…",
+  'capture.understanding': 'Compréhension de vos pensées…',
+  'capture.stageUploading': "Envoi de l'audio",
+  'capture.stageThinking': 'Transcription et organisation de vos mots — quelques secondes en général.',
+  'capture.stageOrganising': 'Organisation de vos mots…',
+  'capture.tapToSpeak': 'Touchez le micro et parlez naturellement',
+  'capture.undo': 'Annuler',
+  'capture.important': 'Important',
+  'capture.kind': 'Type',
+  'capture.doneEditing': 'Terminé',
+  'capture.reject': 'Rejeter',
+  'settings.sound': 'Retour sonore',
+  'settings.soundHint': "Sons courts et discrets au début et à la fin de l'enregistrement, et quand les résultats sont prêts ou enregistrés. Désactivé par défaut.",
   'capture.detected': 'Langue détectée',
   'capture.review': 'Vérifiez avant d’enregistrer',
   'capture.saveSelected': 'Enregistrer la sélection',
@@ -374,7 +451,10 @@ const fr: Record<TranslationKey, string> = {
   'capture.tooShort': 'Enregistrement trop court.',
   'capture.maxReached': 'Durée maximale atteinte.',
   'capture.privacy': "L'audio est envoyé pour transcription et n'est pas conservé. La transcription est gardée avec vos données.",
-  'capture.rwExperimental': 'La reconnaissance du kinyarwanda est expérimentale — vérifiez la transcription.',
+  'capture.voiceUnverified': "La reconnaissance vocale de cette langue n'a pas encore été testée par nous — vérifiez la transcription.",
+  'capture.correctHint': 'Corrigez les erreurs de transcription, puis réorganisez.',
+  'capture.micInsecure': 'Le micro ne fonctionne que sur une page sécurisée (https).',
+  'capture.micBusy': "Le micro est utilisé par une autre application ou bloqué par les réglages de l'appareil. Fermez les autres applications, ou autorisez-le dans les réglages du système.",
   'type.task': 'Tâche',
   'type.reminder': 'Rappel',
   'type.event': 'Événement',
@@ -428,8 +508,15 @@ const fr: Record<TranslationKey, string> = {
   'settings.title': 'Réglages',
   'settings.profile': 'Profil',
   'settings.language': "Langue de l'application",
-  'settings.speech': 'Langue parlée',
+  'settings.speech': 'Langues que vous parlez',
   'settings.speechAuto': 'Détection automatique',
+  'settings.speechHint': "Jusqu'à 3. Elles aident la reconnaissance vocale, y compris quand vous mélangez les langues. Laissez vide pour la détection automatique.",
+  'settings.addLanguage': 'Ajouter une langue…',
+  'settings.removeLanguage': 'Retirer',
+  'settings.voice.verified': 'testée',
+  'settings.voice.experimental': 'expérimentale',
+  'settings.voice.unverified': 'pas encore testée',
+  'settings.uiDraft': 'traduction en attente de relecture',
   'settings.timezone': 'Fuseau horaire',
   'settings.useBrowserTz': 'Utiliser le fuseau de cet appareil',
   'settings.saved': 'Réglages enregistrés.',
@@ -452,6 +539,20 @@ const fr: Record<TranslationKey, string> = {
   'errors.ai_timeout': 'Le service IA a mis trop de temps. Essayez plus court.',
   'errors.audio_too_large': 'Enregistrement trop long.',
   'errors.network': 'Serveur injoignable. Vérifiez votre connexion.',
+  'errors.invalid_credentials': "L'e-mail ou le mot de passe est incorrect. Vérifiez que vous utilisez l'e-mail de votre inscription, ou réinitialisez votre mot de passe.",
+  'errors.email_not_confirmed': "Confirmez d'abord votre e-mail en ouvrant le lien envoyé. Pas reçu ? Renvoyez-le ci-dessous.",
+  'errors.over_email_send_rate_limit': "Trop d'e-mails envoyés. Patientez quelques minutes avant de réessayer.",
+  'errors.over_request_rate_limit': 'Trop de tentatives. Patientez une minute avant de réessayer.',
+  'errors.user_already_exists': 'Un compte existe déjà avec cet e-mail. Connectez-vous ou utilisez « Mot de passe oublié ? ».',
+  'errors.weak_password': 'Mot de passe trop faible. Utilisez au moins 8 caractères avec des lettres et des chiffres.',
+  'errors.same_password': "Choisissez un mot de passe différent de l'actuel.",
+  'errors.otp_expired': 'Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.',
+  'errors.access_denied': 'La connexion a été annulée ou refusée. Réessayez.',
+  'errors.auth_link': "Ce lien de connexion n'est pas valide. Demandez-en un nouveau.",
+  'errors.provider_email_needs_verification': 'Confirmez votre adresse e-mail avec le lien envoyé, puis reconnectez-vous.',
+  'errors.email_address_invalid': "Cette adresse e-mail n'est pas valide. Vérifiez-la.",
+  'errors.signup_disabled': 'Les inscriptions sont fermées pour le moment.',
+  'errors.session_not_found': 'Votre lien de réinitialisation a expiré. Demandez-en un nouveau.',
   'errors.unauthorized': 'Session expirée. Reconnectez-vous.',
   'landing.cta': 'Commencer gratuitement',
   'landing.signin': 'Se connecter',
@@ -484,6 +585,7 @@ const fr: Record<TranslationKey, string> = {
   'errors.empty_audio': "L'enregistrement était vide. Réessayez.",
   'errors.no_audio': "Aucun enregistrement n'a été reçu. Réessayez.",
   'errors.internal': "Un problème est survenu de notre côté. Vos notes sont en sécurité ; réessayez.",
+  'errors.bad_request': "L'enregistrement n'a pas pu être envoyé correctement. Réessayez.",
   'usage.capturesLeft': 'captures vocales IA restantes ce mois-ci',
   'usage.minutesLeft': 'minutes audio restantes',
   'usage.resets': 'Réinitialisation',
@@ -574,14 +676,24 @@ const fr: Record<TranslationKey, string> = {
   'admin.thinkingOn': 'Réflexion du modèle activée',
 };
 
-const dictionaries: Record<UiLanguage, Record<TranslationKey, string>> = { en, fr, rw: en };
+const dictionaries: Record<string, Record<TranslationKey, string>> = { en, fr };
+
+/** The language the interface is actually shown in: the chosen one if translated, else English. */
+export function effectiveUiLanguage(lang: UiLanguage): string {
+  return dictionaries[lang] ? lang : 'en';
+}
 
 export function translate(lang: UiLanguage, key: TranslationKey): string {
   return dictionaries[lang]?.[key] ?? en[key];
 }
 
+/** Locale for dates and numbers: follows the chosen language even when its UI text falls back. */
 export function localeFor(lang: UiLanguage): string {
-  return lang === 'fr' ? 'fr-FR' : lang === 'rw' ? 'rw-RW' : 'en-GB';
+  return getLanguage(lang)?.locale ?? 'en-GB';
+}
+
+export function hasTranslation(lang: string): boolean {
+  return lang in dictionaries;
 }
 
 interface I18nValue { lang: UiLanguage; t: (key: TranslationKey) => string; locale: string }

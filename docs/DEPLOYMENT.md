@@ -28,7 +28,7 @@ This repository, **`hen12r/my-voice-life`**, contains only My Voice Life.
    | `VITE_SUPABASE_PUBLISHABLE_KEY` | the **Publishable** key (starts with `sb_publishable_`) |
 
    - **Don't copy them from the `photosentry` Vercel project.** Those point to Photosentry's database.
-   - **Never** add `VITE_GEMINI_API_KEY`, a secret key (`sb_secret_…`) or a `service_role` key. The build **refuses to run** if it finds one (`scripts/env-guard.mjs`).
+   - **Never** add `VITE_OPENAI_API_KEY`, `VITE_GEMINI_API_KEY`, a secret key (`sb_secret_…`) or a `service_role` key. The build **refuses to run** if it finds one (`scripts/env-guard.mjs`).
 7. Click **Deploy**. The first deployment builds `main`, which still holds only the initial README, so **it is expected to fail or be empty**. That's harmless and doesn't reach users.
 8. **Settings → Git → Production Branch:** keep `main`. Production gets My Voice Life only after the owner merges the migration PR. Until then, test with that PR's **Preview** deployment (Vercel comments its URL on the PR).
 
@@ -53,18 +53,19 @@ Note: preview deployments in the `henry7` team are behind Vercel Authentication,
 3. **Authentication → Providers → Email:** keep "Confirm email" on. Before real users arrive, configure your own SMTP; the built-in sender is heavily rate-limited.
 4. Tell me which project you chose. I'll confirm its status and URL, and **wait for your explicit approval** before applying the migration (`docs/MIGRATION_REVIEW.md`).
 
-## Step 3: Gemini key as a server-side secret (manual)
-1. Create a key in **Google AI Studio** (aistudio.google.com → Get API key). In Google Cloud Console → Credentials, restrict it to the **Generative Language API**.
-2. Check the data-use terms: as far as I know, the **unpaid** Gemini tier allows Google to use submitted content to improve its products, and the paid tier doesn't. Users' voice notes are personal data, so use a billed key before real users. Enabling billing costs money, so it's your decision.
-3. Store it **only** as a Supabase Function Secret. The simplest way, with no key in your terminal history: **Dashboard → Edge Functions → Secrets → Add new secret**:
+## Step 3: OpenAI key as a server-side secret (manual, responsible adult)
+Full guide: [OPENAI_SETUP.md](OPENAI_SETUP.md).
+1. On platform.openai.com, create a project and a key restricted to it. Add a small prepaid credit (the API has no free tier) and set a monthly limit with alerts.
+2. Store the key **only** as a Supabase Function Secret, under **Dashboard → Edge Functions → Secrets → Add new secret**:
    | Name | Value |
    |---|---|
-   | `GEMINI_API_KEY` | your key |
+   | `OPENAI_API_KEY` | your key |
    | `ALLOWED_ORIGINS` | `http://localhost:3000,https://my-voice-life.vercel.app,https://my-voice-life-*-henry7.vercel.app` |
-   | `GEMINI_MODEL` (optional) | default `gemini-2.5-flash`. Check it's still offered in AI Studio |
+   | `OPENAI_TRANSCRIBE_MODEL` / `OPENAI_TEXT_MODEL` (optional) | defaults `gpt-transcribe` / `gpt-6-luna`. A change needs a matching `mvl_price_book` row |
    | `ALERT_WEBHOOK_URL` (optional) | an incoming-webhook URL (Slack, Discord, …) for budget alerts; messages contain no user data |
 
    Never paste the key into chat, GitHub, `.env.local`, Vercel, or any `VITE_` variable. `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided to Edge Functions automatically; don't set them.
+3. For the owner's own testing, give the account **tester** access (least privilege), not admin. The exact SQL is in OPENAI_SETUP.md §5.
 4. Deploy the functions, either yourself:
    ```bash
    npx supabase functions deploy process-voice --project-ref <project-ref>
@@ -88,7 +89,7 @@ When Steps 1–3 are done, I run and report each item with its evidence:
 |---|---|---|
 | 1 | Supabase connection and status | Supabase tools: project `ACTIVE_HEALTHY`, tables present, **security advisor clean** |
 | 2 | Environment variables | `npm run check:env -- --origin https://my-voice-life.vercel.app` (masked output; verifies format, auth health, anonymous access blocked, function deployed, CORS, unauthenticated calls rejected) |
-| 3 | Gemini backend | function logs, plus a real capture in the app; an `ai_not_configured` error means the secret is missing |
+| 3 | OpenAI backend | function logs, plus a real capture in the app; an `ai_not_configured` error means the secret is missing |
 | 4 | Build | `npm run build` |
 | 5 | Tests | `npm test`, `npm run typecheck`, `npm run test:db`, `deno check` |
 | 6 | Branch | `git status` / PR head SHA equals the deployed SHA |
