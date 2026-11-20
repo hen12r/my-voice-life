@@ -13,12 +13,12 @@
 ## Not verifiable from here
 | # | Check | Status | How to check |
 |---|---|---|---|
-| 2 | `OPENAI_API_KEY` configured | ❓ **unknown** | No available tool lists secret names, and Supabase reported "Storing keys is paused". Supabase Dashboard → Edge Functions → Secrets shows names only, never values. During a capture, the error `ai_not_configured` means the key is missing |
+| 2 | `OPENAI_API_KEY` configured | ❌ **not set** (re-checked 2026-11-20 ~21:15 UTC) | Supabase Dashboard → Edge Functions → Secrets says "No custom secrets created" (it shows names only, never values). An adult must add it: see `docs/OPENAI_SETUP.md` §2. During a capture, the error `ai_not_configured` means the key is missing |
 
 ## Blocked by external configuration
 | # | Check | Status | Blocked by |
 |---|---|---|---|
-| 4 | Voice pipeline live: recording → transcription → AI → review → save | ⬜ **never run live** | `OPENAI_API_KEY`, which an adult must add. Live state: 0 `mvl_ai_usage` rows, 0 `voice_sessions`, 0 function calls in the last 24 h. Proven **offline only**: 27 Deno tests with real recordings and fake OpenAI, plus mocked browser runs (record → upload → review → edit/accept → save) |
+| 4 | Voice pipeline live: recording → transcription → AI → review → save | ⬜ **never run live** | `OPENAI_API_KEY`, which an adult must add. Live state: 0 `mvl_ai_usage` rows, 0 `voice_sessions`, 0 function calls in the last 24 h. Proven **offline only**: 30 Deno tests with real recordings and fake OpenAI, plus mocked browser runs (record → upload → review → edit/accept → save) |
 | 5 | Stripe test mode | ⬜ **code ready, not configured** | an adult-owned Stripe test account; a product and prices; the Customer Portal; the webhook endpoint; Supabase secrets `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PREMIUM_MONTHLY` (`docs/STRIPE_SETUP.md`). Live: 0 Stripe events, no customers |
 
 ## Live voice test, once the key exists

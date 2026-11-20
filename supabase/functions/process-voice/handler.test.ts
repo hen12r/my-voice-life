@@ -44,8 +44,12 @@ function makeFetch(opts: { transcribe?: (Json | number)[]; responses?: (Json | n
   const calls: FetchCall[] = [];
   const tq = [...(opts.transcribe ?? [TRANSCRIBE_OK])];
   const rq = [...(opts.responses ?? [EXTRACT_OK])];
+  // A number = an error status with a plain body; { __status, body } = an error status with a
+  // JSON body (used to imitate the SHAPE of OpenAI error bodies; these are fakes, not real replies).
   const respond = (v: Json | number) =>
-    typeof v === 'number' ? new Response('provider error', { status: v }) : new Response(JSON.stringify(v), { status: 200 });
+    typeof v === 'number' ? new Response('provider error', { status: v })
+    : typeof v.__status === 'number' ? new Response(JSON.stringify(v.body), { status: v.__status })
+    : new Response(JSON.stringify(v), { status: 200 });
   const fn: typeof fetch = (input, init) => {
     const url = String(input);
     const form = init?.body instanceof FormData ? init.body : null;
@@ -280,6 +284,50 @@ Deno.test('provider 429 during transcription: closed as failed, nothing recorded
   assertEq(s.f.responses().length, 0, 'extraction not attempted');
   assertEq(s.a.names(), ['mvl_reserve_ai_capture', 'mvl_finish_ai_capture'], 'a rejected request is not billed');
   assertEq(s.a.calls[1].args, { p_reservation: 'res-1', p_status: 'failed', p_error_code: 'upstream_429' }, 'failed with code');
+});
+
+/** Runs fn while capturing console output, so tests can prove what is (not) logged. */
+async function captureLogs<T>(fn: () => Promise<T>): Promise<{ result: T; logs: string }> {
+  const lines: string[] = [];
+  const orig = { error: console.error, warn: console.warn, log: console.log };
+  const grab = (...a: unknown[]) => { lines.push(a.map((x) => (x instanceof Error ? `${x.message} ${x.stack}` : typeof x === 'string' ? x : JSON.stringify(x))).join(' ')); };
+  console.error = grab; console.warn = grab; console.log = grab;
+  try { return { result: await fn(), logs: lines.join('\n') }; } finally { Object.assign(console, orig); }
+}
+
+// Fake 401 body in the shape OpenAI uses for a wrong key (it echoes a masked key fragment).
+const FAKE_401 = { __status: 401, body: { error: { message: 'Incorrect API key provided: sk-proj-************************ab12. You can find your API key at https://platform.openai.com/account/api-keys.', type: 'invalid_request_error', code: 'invalid_api_key' } } };
+
+Deno.test('wrong or revoked key (401) on transcription: ai_not_configured, not billed, no key fragment in logs', async () => {
+  const s = setup({ fetch: makeFetch({ transcribe: [FAKE_401] }) });
+  const { result: r, logs } = await captureLogs(() => s.handler(voiceRequest()));
+  assertEq(r.status, 503, 'status'); assertEq(await code(r), 'ai_not_configured', 'code');
+  assertEq(s.f.responses().length, 0, 'extraction not attempted');
+  assertEq(s.a.names(), ['mvl_reserve_ai_capture', 'mvl_finish_ai_capture'], 'a refused request is not billed');
+  assertEq(s.a.calls[1].args.p_error_code, 'upstream_401', 'failure code');
+  assert(logs.includes('OPENAI_API_KEY'), 'logs point the admin at the secret');
+  assert(!logs.includes('ab12'), 'masked key fragment from the error body is redacted');
+  assert(!logs.includes('test-key'), 'the configured key never appears in logs');
+});
+
+Deno.test('key not allowed to use the text model (403) on extraction: ai_not_configured, transcription still booked', async () => {
+  const s = setup({ fetch: makeFetch({ responses: [{ __status: 403, body: { error: { message: 'Project does not have access to model gpt-6-luna', code: 'model_not_allowed' } } }] }) });
+  const { result: r, logs } = await captureLogs(() => s.handler(voiceRequest()));
+  assertEq(r.status, 503, 'status'); assertEq(await code(r), 'ai_not_configured', 'code');
+  assertEq(s.a.names(), ['mvl_reserve_ai_capture', 'mvl_record_ai_transcription', 'mvl_finish_ai_capture'], 'the transcription that ran is booked; extraction was refused');
+  assert(logs.includes('gpt-6-luna'), 'logs name the models to allow');
+  const body = JSON.stringify(await setup({ fetch: makeFetch({ responses: [403] }) }).handler(voiceRequest()).then((x) => x.json()));
+  assert(!body.includes('test-key') && !body.includes('OPENAI_API_KEY'), 'the browser gets a generic message, no configuration details');
+});
+
+Deno.test('the key is never sent anywhere except api.openai.com, and never returned to the browser', async () => {
+  const s = setup();
+  const r = await s.handler(voiceRequest());
+  const text = await r.text();
+  assert(!text.includes('test-key'), 'response body has no key');
+  for (const c of s.f.calls) {
+    if (c.headers.authorization?.includes('test-key')) assert(c.url.startsWith('https://api.openai.com/'), `key only sent to OpenAI, not ${c.url}`);
+  }
 });
 
 Deno.test('provider timeout during transcription: measured length is booked (may have been billed)', async () => {

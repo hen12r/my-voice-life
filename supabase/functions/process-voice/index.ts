@@ -7,12 +7,17 @@
 //   ALERT_WEBHOOK_URL          optional budget-alert webhook (no user data is sent)
 // Changing a model requires a matching row in mvl_price_book, otherwise AI fails closed.
 import { createClient } from 'npm:@supabase/supabase-js@2.48.1';
+import { normaliseApiKey } from '../_shared/secrets.ts';
 import { DEFAULT_TEXT_MODEL, DEFAULT_TRANSCRIBE_MODEL } from '../_shared/transcription.ts';
 import { createHandler } from './handler.ts';
 import { createOpenAiProvider } from './provider.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+// Read once at startup. Pasting mistakes (spaces, a line break, quotes) are corrected; warnings
+// describe the problem without ever including the key. The key itself is never logged.
+const { key: OPENAI_API_KEY, warnings: keyWarnings } = normaliseApiKey(Deno.env.get('OPENAI_API_KEY'));
+for (const w of keyWarnings) console.warn(`process-voice: ${w}`);
+if (!OPENAI_API_KEY) console.warn('process-voice: OPENAI_API_KEY is not configured; AI requests will get ai_not_configured.');
 
 Deno.serve(createHandler({
   provider: OPENAI_API_KEY

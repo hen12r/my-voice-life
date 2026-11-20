@@ -254,6 +254,15 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
         if (error) console.error('process-voice: could not close reservation', error);
       } // AccountingError: leave 'reserved' → expires with worst-case cost (never under-counts spend)
       if (err instanceof UpstreamError) {
+        if (err.status === 401 || err.status === 403) {
+          // Wrong, revoked or project-restricted key, or a model the key's project may not use.
+          // A setup problem, not an outage: say so plainly in the logs (never the key itself).
+          console.error(`process-voice: OpenAI refused the request (HTTP ${err.status}). Check the OPENAI_API_KEY secret in Supabase → Edge Functions → Secrets, and that the key's project allows ${provider.transcribeModel} and ${provider.textModel}.`);
+          return fail(req, 503, 'ai_not_configured', 'The AI provider rejected the server configuration.');
+        }
+        if (err.status === 404) {
+          console.error(`process-voice: OpenAI returned 404. A configured model (${provider.transcribeModel} / ${provider.textModel}) may not exist or may not be available to this key.`);
+        }
         if (err.status === 429) return fail(req, 503, 'ai_busy', 'The AI provider is rate limiting requests. Try again shortly.');
         if (err.status === 400 || err.status === 413 || err.status === 415) return fail(req, 422, 'ai_rejected_input', 'The AI provider could not process this recording.');
         return fail(req, 502, 'ai_unavailable', 'The AI provider is unavailable.');

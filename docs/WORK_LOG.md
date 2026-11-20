@@ -2,6 +2,21 @@
 
 A record of completed and unfinished work. Newest first. "Verified" means a test or tool output shows it; anything else is labelled.
 
+## 2026-11-20 — OpenAI integration readiness (branch `claude/stripe-billing`)
+Audit of `process-voice` against developers.openai.com: the `gpt-transcribe` (`/v1/audio/transcriptions`, multiple language hints) and `gpt-6-luna` (`/v1/responses`, `reasoning.effort: none`, Structured Outputs) model IDs and options exist as used. No key handled, no deploy, no migration, no secret changed.
+
+| Change | Why | Evidence |
+|---|---|---|
+| `_shared/secrets.ts`: `redactSecrets`, used on every OpenAI error text and on the language-hint retry warning | OpenAI's 401 body echoes a masked key fragment, which went into Supabase logs, and the retry warning logged the raw body | Vitest `secrets.test.ts`; Deno test "wrong or revoked key (401)…": with redaction removed, it **fails** (mutation check) |
+| `normaliseApiKey` in `index.ts` | A key pasted with a trailing line break or quotes made every request throw a generic error, and booked the recording as spent | Vitest cases for spaces, quotes, inner whitespace, and warnings that never include the key |
+| OpenAI 401/403 → `ai_not_configured` plus a setup hint in the log; 404 → a model hint | A wrong, revoked or model-restricted key used to show as a generic `ai_unavailable` with no clue | 2 new Deno tests (not billed when refused; the browser gets no configuration details) |
+| Test: the key goes only to `api.openai.com` and is never in a response | Locks in the existing behaviour | Deno test |
+| `docs/OPENAI_SETUP.md` rewritten (current live status, key handling, setup, check, troubleshooting) | It still said the function was not deployed | — |
+
+Tests: Vitest 147/147, Deno `process-voice` 30/30, all function tests and type checks pass. **All OpenAI replies in tests are fakes**; no request has reached OpenAI.
+
+**Still blocked (needs an adult):** `OPENAI_API_KEY` in Supabase Edge Function secrets (re-checked: "No custom secrets created"). Then a live capture test (`docs/OPENAI_SETUP.md` §3). Before production: `ALLOWED_ORIGINS`.
+
 ## 2026-11-18/19 — autonomous cloud session (branch `claude/autonomous-hardening`)
 Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the owner's computer off. Based on PR #1 head `feaa738`.
 

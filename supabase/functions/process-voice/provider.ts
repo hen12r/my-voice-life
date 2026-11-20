@@ -1,6 +1,7 @@
 // AI provider abstraction for process-voice. One active implementation (OpenAI); another
 // provider can be added by implementing AiProvider and adding its prices to mvl_price_book.
 import { EXTRACTION_JSON_SCHEMA } from '../_shared/extraction.ts';
+import { redactSecrets } from '../_shared/secrets.ts';
 import { buildTranscriptionForm, OPENAI_API, pipelineModelKey } from '../_shared/transcription.ts';
 
 export class UpstreamError extends Error {
@@ -41,8 +42,10 @@ export function createOpenAiProvider(cfg: OpenAiConfig): AiProvider {
   const auth = { Authorization: `Bearer ${cfg.apiKey}` };
 
   async function failure(res: Response, what: string): Promise<UpstreamError> {
-    // Error bodies never contain the key; keep them short in logs.
-    return new UpstreamError(res.status, `OpenAI ${what} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    // OpenAI's 401 body echoes a masked fragment of the key ("Incorrect API key provided:
+    // sk-proj-****ab12"), so error text is redacted and bounded before it can reach any log.
+    const body = await res.text().catch(() => '');
+    return new UpstreamError(res.status, `OpenAI ${what} ${res.status}: ${redactSecrets(body)}`);
   }
 
   return {
@@ -63,7 +66,7 @@ export function createOpenAiProvider(cfg: OpenAiConfig): AiProvider {
       if (res.status === 400 && speechLanguages.length > 0) {
         // A language hint the model does not accept must not block the capture: retry once
         // with automatic detection. Rejected requests are not billed.
-        console.warn('process-voice: transcription rejected with language hints; retrying without', await res.text().catch(() => ''));
+        console.warn('process-voice: transcription rejected with language hints; retrying without', redactSecrets(await res.text().catch(() => '')));
         res = await send([]);
       }
       if (!res.ok) throw await failure(res, 'transcription');
