@@ -100,9 +100,39 @@ do $$ declare r jsonb; begin
   perform pg_temp.expect(r->>'reason' = 'ai_test_mode', 'non-staff user refused while AI is admins_only');
 end $$;
 
+-- Execution rights of the elevated (SECURITY DEFINER) functions, checked from the catalogue
+-- and by calling them: the refusal must be a permission error (42501), not a side effect of
+-- a bad argument (a random reservation id would also fail, for the wrong reason).
+create or replace function pg_temp.expect_denied(sql text, label text) returns void language plpgsql as $$
+begin
+  begin execute sql;
+  exception when insufficient_privilege then raise notice 'PASS  %', label; return;
+            when others then raise exception 'FAIL  % (failed for the wrong reason: % %)', label, sqlstate, sqlerrm;
+  end;
+  raise exception 'FAIL  % (statement succeeded but should have been denied)', label;
+end $$;
+select pg_temp.expect(not has_function_privilege('authenticated', 'public.mvl_record_ai_transcription(uuid, numeric)', 'execute'), 'record_ai_transcription: authenticated has no EXECUTE');
+select pg_temp.expect(not has_function_privilege('anon', 'public.mvl_record_ai_transcription(uuid, numeric)', 'execute'), 'record_ai_transcription: anon has no EXECUTE');
+select pg_temp.expect(has_function_privilege('service_role', 'public.mvl_record_ai_transcription(uuid, numeric)', 'execute'), 'record_ai_transcription: service_role has EXECUTE');
+select pg_temp.expect((select prosecdef from pg_proc where oid = 'public.mvl_record_ai_transcription(uuid, numeric)'::regprocedure), 'record_ai_transcription is SECURITY DEFINER (documented)');
+select pg_temp.expect(not has_function_privilege('authenticated', 'public.mvl_capture_cost_ceiling(public.mvl_price_book, numeric)', 'execute'), 'replaced capture_cost_ceiling keeps its lockdown: authenticated has no EXECUTE');
+select pg_temp.expect(not has_function_privilege('anon', 'public.mvl_capture_cost_ceiling(public.mvl_price_book, numeric)', 'execute'), 'replaced capture_cost_ceiling keeps its lockdown: anon has no EXECUTE');
+select pg_temp.expect(not (select prosecdef from pg_proc where oid = 'public.mvl_valid_language_codes(text[])'::regprocedure), 'valid_language_codes is NOT security definer (runs with caller rights)');
 select pg_temp.as_user('0a000000-0000-0000-0000-000000000002');
-select pg_temp.expect_error($$select public.mvl_record_ai_transcription(gen_random_uuid(), 10)$$, 'user cannot call record_ai_transcription');
+select pg_temp.expect_denied($$select public.mvl_record_ai_transcription(gen_random_uuid(), 10)$$, 'user cannot call record_ai_transcription (permission denied)');
+select pg_temp.expect_denied($$select public.mvl_capture_cost_ceiling(null::public.mvl_price_book, 10)$$, 'user cannot call capture_cost_ceiling (permission denied)');
 reset role;
+select set_config('request.jwt.claims', '', false);
+set role anon;
+select pg_temp.expect_denied($$select public.mvl_record_ai_transcription(gen_random_uuid(), 10)$$, 'anonymous visitor cannot call record_ai_transcription (permission denied)');
+reset role;
+-- The language-code validator itself.
+select pg_temp.expect(public.mvl_valid_language_codes(array['rw','fr','en','pt-br','zh-cn','yue']), 'valid codes accepted (rw, fr, en, pt-br, zh-cn, yue)');
+select pg_temp.expect(not public.mvl_valid_language_codes(array['Kinyarwanda']), 'language names rejected');
+select pg_temp.expect(not public.mvl_valid_language_codes(array['FR']), 'upper-case codes rejected');
+select pg_temp.expect(not public.mvl_valid_language_codes(array['f']), 'one-letter codes rejected');
+select pg_temp.expect(not public.mvl_valid_language_codes(array['fr; drop table notes']), 'injection-looking text rejected');
+select pg_temp.expect(public.mvl_valid_language_codes('{}'::text[]), 'empty list accepted (= automatic detection)');
 
 -- ===================== Free plan: 7 captures; quota counts billed minutes =====================
 do $$ declare r jsonb; i int; begin

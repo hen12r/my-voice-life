@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { errorMessage, translate, type TranslationKey } from './i18n';
+import { effectiveUiLanguage, errorMessage, hasTranslation, localeFor, translate, type TranslationKey } from './i18n';
 import { REFUSAL_STATUS } from '../../supabase/functions/_shared/usage.ts';
 
 // Every error code the backend can return: read from the handler's source so the list cannot
@@ -35,3 +35,22 @@ describe('error messages', () => {
     expect(errorMessage(t, new Error('x'.repeat(500)))).toBe(translate('en', 'errors.generic'));
   });
 });
+
+describe('interface language fallback (languages without a translation)', () => {
+  it('shows English text for a valid but untranslated language (sw, rw, zh-cn)', () => {
+    for (const lang of ['sw', 'rw', 'zh-cn']) {
+      expect(hasTranslation(lang)).toBe(false);
+      expect(effectiveUiLanguage(lang)).toBe('en');
+      expect(translate(lang, 'nav.capture' as TranslationKey)).toBe(translate('en', 'nav.capture' as TranslationKey));
+    }
+  });
+  it('shows English for a code the app has never heard of, and uses a safe default locale', () => {
+    expect(effectiveUiLanguage('xx')).toBe('en');
+    expect(translate('xx', 'nav.capture' as TranslationKey)).toBe(translate('en', 'nav.capture' as TranslationKey));
+    expect(localeFor('xx')).toBe('en-GB');
+  });
+  it('keeps French when French is chosen', () => {
+    expect(effectiveUiLanguage('fr')).toBe('fr');
+  });
+});
+

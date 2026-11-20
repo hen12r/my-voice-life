@@ -27,6 +27,47 @@ run_test mvl_test supabase/tests/financial_test.sql
 
 run_test mvl_test supabase/tests/openai_multilingual_test.sql
 
+echo "== Scenario: rollback of migrations 3-4 (round trip, and refusals that protect data)"
+reset_db mvl_test
+migrate mvl_test
+R="psql -v ON_ERROR_STOP=1 -qtA -d mvl_test"
+RB=supabase/rollback/rollback_20261119_migrations_3_4.sql
+$R -c "insert into auth.users (id, email) values ('77777777-0000-0000-0000-000000000001','rb@test')"
+$R -c "insert into public.notes (user_id, title, body) values ('77777777-0000-0000-0000-000000000001','keep me','x')" >/dev/null
+NOTES_BEFORE=$($R -c "select count(*) from public.notes"); [ "$NOTES_BEFORE" -ge 1 ] || { echo "FAIL  test note not created"; exit 1; }
+# Refusal 1: a profile already uses a language outside en/fr/rw.
+$R -c "update public.profiles set ui_language = 'sw' where id = '77777777-0000-0000-0000-000000000001'"
+if PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f "$RB" >/dev/null 2>&1; then echo "FAIL  rollback should refuse when a profile uses sw"; exit 1; fi
+[ "$($R -c "select count(*) from information_schema.columns where table_name='profiles' and column_name='speech_languages'")" = 1 ] || { echo "FAIL  refused rollback changed the schema"; exit 1; }
+echo "PASS  rollback refuses (and changes nothing) when a profile uses a language outside en/fr/rw"
+$R -c "update public.profiles set ui_language = 'en' where id = '77777777-0000-0000-0000-000000000001'"
+# Refusal 2: OpenAI prices already referenced by recorded usage.
+$R -c "update public.mvl_app_settings set ai_mode = 'on'" \
+   -c "select public.mvl_finish_ai_capture((public.mvl_reserve_ai_capture('77777777-0000-0000-0000-000000000001','text',0,'openai','gpt-6-luna')->>'reservation_id')::uuid, 'ok')" >/dev/null
+if PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f "$RB" >/dev/null 2>&1; then echo "FAIL  rollback should refuse when cost history references OpenAI prices"; exit 1; fi
+echo "PASS  rollback refuses (and changes nothing) when cost history references the OpenAI prices"
+$R -c "delete from public.mvl_ai_usage where user_id = '77777777-0000-0000-0000-000000000001'" -c "update public.mvl_app_settings set ai_mode = 'admins_only'"
+# Clean rollback.
+$R -c "update public.profiles set speech_languages = array['fr','en'] where id = '77777777-0000-0000-0000-000000000001'"
+PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f "$RB"
+CHECK=$($R -c "select
+  (select count(*) from information_schema.columns where table_name='profiles' and column_name='speech_languages') = 0
+  and (select count(*) from information_schema.columns where table_name='mvl_price_book' and column_name='audio_usd_per_minute') = 0
+  and to_regprocedure('public.mvl_record_ai_transcription(uuid,numeric)') is null
+  and to_regprocedure('public.mvl_valid_language_codes(text[])') is null
+  and (select count(*) from public.mvl_price_book where provider = 'openai') = 0
+  and (select count(*) from pg_constraint where conname in ('profiles_ui_language_chk','profiles_speech_language_chk')) = 2
+  and position('audio_usd_per_minute' in pg_get_functiondef('public.mvl_capture_cost_ceiling(public.mvl_price_book,numeric)'::regprocedure)) = 0
+  and not has_function_privilege('authenticated', 'public.mvl_capture_cost_ceiling(public.mvl_price_book,numeric)', 'execute')
+  and (select count(*) from public.notes) = $NOTES_BEFORE")
+[ "$CHECK" = t ] || { echo "FAIL  rollback did not restore the pre-migration-3 state"; exit 1; }
+echo "PASS  rollback restores the pre-migration-3 state (columns, functions, prices, constraints, lockdown) and keeps notes"
+# Re-apply after rollback.
+for f in supabase/migrations/20261119000001_*.sql supabase/migrations/20261119000002_*.sql; do PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f "$f"; done
+[ "$($R -c "select count(*) from public.mvl_price_book where provider='openai'")" = 2 ] || { echo "FAIL  re-apply after rollback"; exit 1; }
+echo "PASS  migrations 3-4 re-apply cleanly after a rollback"
+echo "ALL ROLLBACK TESTS PASSED"
+
 echo "== Scenario: concurrent requests cannot bypass limits or budgets"
 reset_db mvl_test
 migrate mvl_test

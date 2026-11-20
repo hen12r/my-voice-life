@@ -51,6 +51,46 @@
    - the security advisor shows nothing new.
 3. I report back. Nothing else changes: no staff row, no deploy, no `ai_mode` change.
 
+## Elevated functions and who can execute them
+Elevated (`SECURITY DEFINER`) functions run with the owner's rights, so the question that matters is who may call them. This is checked in the catalogue (`has_function_privilege`) **and** by calling each function as a user. The call must fail with a permission error (SQLSTATE 42501), not because of a bad argument.
+
+| Function | Elevated? | `anon` | `authenticated` | `service_role` (Edge Function) | How the right is set |
+|---|---|---|---|---|---|
+| `mvl_record_ai_transcription` (new, migration 3) | yes | **no** | **no** | yes | `revoke … from public, anon, authenticated; grant … to service_role` in the migration |
+| `mvl_capture_cost_ceiling` (replaced, migration 3) | yes | **no** | **no** | via reservation only | revoked in migration 2. `create or replace` keeps the existing rights, and the tests prove the lockdown survives |
+| `mvl_valid_language_codes` (new, migration 4) | **no** (runs with the caller's rights) | default | default | default | pure text check, reads no table |
+
+## Language codes and the English fallback
+- **The database checks the format.** A code must look like `rw`, `fr`, `yue` or `pt-br`: lower case, 2–3 letters, optional region. Names (`Kinyarwanda`), upper case (`FR`), one letter, injection-looking text and more than 3 spoken languages are all rejected. This is tested.
+- **The app falls back to English** for any interface language without a translation, including codes it has never heard of. Dates and numbers use that language's locale, or `en-GB` when it is unknown. Unit tests cover `sw`, `rw`, `zh-cn` and `xx`. French stays French. Only English (reviewed) and French (draft) are translated today.
+- **Spoken languages are hints only.** If OpenAI rejects one, the request is retried once without hints (this is tested). It is never a hard failure.
+
+## Rollback and recovery
+**First response to any problem: the kill switch.** It changes no schema, is instant and reversible, and stops every AI call, including testers':
+```sql
+update public.mvl_app_settings set ai_mode = 'off';   -- undo: set back to 'admins_only'
+```
+
+**Full rollback of migrations 3–4:** [`supabase/rollback/rollback_20261119_migrations_3_4.sql`](../supabase/rollback/rollback_20261119_migrations_3_4.sql). It is not a migration and is never applied automatically. Running it on the live project needs your approval.
+- It runs as one transaction, and **refuses without changing anything** if rolling back would destroy information:
+  - a profile already uses a language outside en/fr/rw;
+  - recorded AI usage already references the OpenAI prices (cost history).
+- Otherwise it restores the previous state exactly:
+  - drops the new column, constraints and functions;
+  - restores the old en/fr/rw checks;
+  - restores the original cost function, with its lockdown;
+  - deletes the 2 OpenAI price rows;
+  - removes the 2 versions from Supabase's migration history, so they can be re-applied.
+- **What it loses:** users' lists of up to 3 spoken languages. Notes, tasks, events, reminders and the single spoken-language setting are kept.
+- **Tested** in `npm run test:db`, "rollback" scenario:
+  - both refusals leave the schema untouched;
+  - a clean rollback restores the pre-migration state and keeps notes;
+  - the migrations re-apply cleanly afterwards.
+
+**When the rollback refuses** (real usage exists), fix forward instead: kill switch, then a new additive migration. Cost history is never deleted to make a rollback possible.
+
+**Backups:** check the Supabase dashboard (Database → Backups) to see what your plan includes before approving. I haven't verified it for this project.
+
 ---
 
 ## Tester access (separate approval)
