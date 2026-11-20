@@ -6,6 +6,7 @@ Tagline: *Your voice. Your ideas. Your organised life.*
 ## Stack
 - **Frontend:** Vite 6 + React 19 + TypeScript (strict) + Tailwind CSS v4 (`@tailwindcss/vite`) + React Router 7 + lucide-react. Source in `src/`.
 - **Backend:** Supabase (Postgres + Auth + RLS) and Deno Edge Functions in `supabase/functions/`.
+- **Payments:** Stripe (TEST MODE) via REST from the `billing` and `stripe-webhook` Edge Functions only (secrets `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, price ids `STRIPE_PRICE_PREMIUM_MONTHLY/YEARLY`). See `docs/STRIPE_SETUP.md`.
 - **AI:** OpenAI via REST, called **only** from the `process-voice` Edge Function (key = Supabase secret `OPENAI_API_KEY`): `gpt-transcribe` (speech → text, billed per minute) then `gpt-6-luna` through the Responses API with a strict JSON schema (text → items). Provider code sits behind `AiProvider` (`process-voice/provider.ts`). See `docs/OPENAI_SETUP.md`.
 
 ## Commands
@@ -13,7 +14,7 @@ Tagline: *Your voice. Your ideas. Your organised life.*
 - `npm run typecheck` / `npm test` (Vitest) / `npm run build`
 - `npm run test:db` — applies all migrations to a throwaway local Postgres with a Supabase shim and runs `supabase/tests/rls_test.sql`. Needs `PGHOST/PGPORT/PGUSER` pointing at a **local** Postgres. Never point it at production.
 - `npx deno@2.1.4 check supabase/functions/*/index.ts` — type-check Edge Functions.
-- `npm run test:functions` — Deno orchestration tests for `process-voice` (fakes for OpenAI/Supabase, real recordings from `_shared/__fixtures__`; proves measure → reserve → paid call → record → finish ordering).
+- `npm run test:functions` — Deno tests for `process-voice`, `billing`, `stripe-webhook`, `delete-account`; for process-voice (fakes for OpenAI/Supabase, real recordings from `_shared/__fixtures__`; proves measure → reserve → paid call → record → finish ordering).
 - CI: `.github/workflows/ci.yml` runs all of the above plus `test:db` on every push/PR. Keep it green; never skip or disable a test to pass it.
 - `npm run check:env [-- --origin <url>]` — validates `.env.local` and probes Supabase (auth health, anon access blocked, function + CORS). Prints masked values only.
 - `node scripts/eval/transcribe.mjs` / `score.mjs` — Kinyarwanda/STT evaluation (see `docs/kinyarwanda/TEST_PLAN.md`); data lives in git-ignored `eval-data/`.
@@ -32,6 +33,7 @@ Tagline: *Your voice. Your ideas. Your organised life.*
 11. New SQL objects get collision-proof names (`mvl_` prefix or similar) — never `create or replace` a function/trigger name a legacy schema might already use.
 12. **Financial figures are labelled.** Anything not directly recorded is shown as *projected* or *estimate*; contribution is never called profit. Admin views show aggregates and pseudonymous IDs only, never note or transcript content.
 13. AI stays in `admins_only` mode until the owner approves live OpenAI billing (managed by a responsible adult) and the privacy review. Audio length for reservations is read from the file (`_shared/audio-duration.ts`), never trusted from the client. A model change needs a matching `mvl_price_book` row (AI fails closed otherwise). Prices and limits live in tables (`mvl_price_book`, `mvl_plan_limits`, `mvl_app_settings`), not in code.
+14. **Payments are server-verified.** Premium is granted ONLY by `stripe-webhook` after verifying the Stripe-Signature and re-fetching the subscription from Stripe, through `mvl_billing_apply_subscription()` (service role). Never trust anything the browser reports about a payment; never accept a price, amount, customer or redirect URL from the browser. Live keys stay refused until the owner sets `STRIPE_LIVE_MODE_APPROVED=true`; never set it yourself.
 
 ## Layout
 ```
@@ -39,17 +41,22 @@ src/
   auth/AuthProvider.tsx   session + profile context
   components/             AppShell (nav), ui.tsx (design-system primitives)
   lib/                    supabase client, api (data access + commit logic), dates (tz math), i18n (en/fr), types
-  pages/                  Landing, Auth (login/register/forgot/reset), Dashboard, Capture, Notes, Tasks, Schedule, Memory, Settings, Admin (staff-only usage + finance)
+  pages/                  Landing, Auth (login/register/forgot/reset), Dashboard, Capture, Notes, Tasks, Schedule, Memory, Settings, Admin (staff-only usage + finance), Pricing, BillingSuccess
   voice/useRecorder.ts    MediaRecorder hook (in-memory only)
 supabase/
   migrations/             versioned SQL
   functions/_shared/      extraction.ts, transcription.ts, languages.ts (language registry), audio-duration.ts, cors.ts, usage.ts (pure, shared & tested), http.ts (Deno-only), __fixtures__/ (real recordings for tests)
   functions/process-voice handler.ts (logic, injectable deps) + provider.ts (AiProvider + OpenAI) + index.ts (wiring) + handler.test.ts (Deno)
-  functions/delete-account
+  functions/billing       prices (public) / checkout / portal — handler.ts + handler.test.ts
+  functions/stripe-webhook signature-verified webhook → mvl_billing_apply_subscription — handler.ts + handler.test.ts
+  functions/delete-account cancels any Stripe subscription first, then deletes — handler.ts + handler.test.ts
+  functions/_shared/stripe.ts  signature verification, snapshots, REST client (pure, Vitest-tested); billing-env.ts (Deno)
+  rollback/               tested rollback scripts (never applied automatically)
   tests/                  shim + RLS test suite
   preflight/              read-only inspection SQL to run before approving migrations
   tests/financial_test.sql  allowance/budget/kill-switch/dashboard checks (+ race test in scripts/test-db.sh)
   tests/openai_multilingual_test.sql  per-minute pricing, transcription recording, language settings, multilingual search
+  tests/billing_test.sql  Stripe lifecycle, idempotency, user binding, permissions
 docs/                     ARCHITECTURE, DEPLOYMENT, MIGRATION_REVIEW, OPENAI_SETUP, GOOGLE_OAUTH_SETUP, LANGUAGES, PRODUCT, ROADMAP, SETUP, kinyarwanda/ (test plan, prompts, sheet)
 scripts/                  test-db.sh, check-env.mjs, env-guard.mjs (build secret guard), eval/ (WER/CER tooling)
 vercel.json               build settings, SPA rewrite, security headers (CSP)

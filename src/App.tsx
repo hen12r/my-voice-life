@@ -15,6 +15,8 @@ import Schedule from './pages/Schedule';
 import Memory from './pages/Memory';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import Pricing from './pages/Pricing';
+import BillingSuccess from './pages/BillingSuccess';
 import type { UiLanguage } from './lib/types';
 import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
 import { getLanguage } from '../supabase/functions/_shared/languages.ts';
@@ -71,6 +73,7 @@ export default function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/app" element={<RequireAuth><AppShell /></RequireAuth>}>
               <Route index element={<Dashboard />} />
               <Route path="capture" element={<Capture />} />
@@ -80,6 +83,7 @@ export default function App() {
               <Route path="memory" element={<Memory />} />
               <Route path="settings" element={<Settings />} />
               <Route path="admin" element={<Admin />} />
+              <Route path="billing/success" element={<BillingSuccess />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

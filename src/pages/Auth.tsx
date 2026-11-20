@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { errorMessage, useI18n } from '../lib/i18n';
@@ -108,7 +108,10 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  if (session) return <Navigate to="/app" replace />;
+  // Return to the page that sent the user here (internal paths only, never an external URL).
+  const from = (useLocation().state as { from?: unknown } | null)?.from;
+  const target = typeof from === 'string' && /^\/(app|pricing)(\/|$)/.test(from) ? from : '/app';
+  if (session) return <Navigate to={target} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -116,7 +119,7 @@ export function Login() {
     // The password is sent exactly as typed (spaces can be part of it); the email is trimmed.
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
-    if (error) { setError(errorMessage(t, error)); setErrorCode((error as { code?: string }).code ?? null); } else navigate('/app');
+    if (error) { setError(errorMessage(t, error)); setErrorCode((error as { code?: string }).code ?? null); } else navigate(target);
   };
 
   return (

@@ -13,6 +13,7 @@ export function looksSecret(value) {
   if (value.startsWith('sb_secret_')) return true;            // Supabase secret API key
   if (/^AIza[0-9A-Za-z_-]{20,}/.test(value)) return true;     // Google / Gemini API key
   if (/^(sk|rk)[-_]/.test(value)) return true;                 // OpenAI / Stripe style secrets
+  if (value.startsWith('whsec_')) return true;                 // Stripe webhook signing secret
   return jwtRole(value) === 'service_role';                    // legacy Supabase service key
 }
 

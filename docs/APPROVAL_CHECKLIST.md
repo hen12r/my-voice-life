@@ -56,5 +56,9 @@ Follow `docs/GOOGLE_OAUTH_SETUP.md`. You enter the Client ID and Secret in Supab
 - A privacy policy (I can draft it, but you approve it).
 - Tests on one iPhone and one Android phone.
 
+### ☐ 9. Stripe payments (test mode, optional)
+Follow `docs/STRIPE_SETUP.md`: an adult creates the Stripe account, the prices, the webhook, and the secrets in Supabase.
+**Reply:** "Approve migration 5" (SQL in `docs/MIGRATION_5_BILLING_REVIEW.md`), then "Approve deploying billing, stripe-webhook and delete-account".
+
 ---
 **I will not, without your reply:** merge into `main`, deploy to production, apply migrations, add staff rows, enable billing, or touch Photosentry.

@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { LogOut, Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
+import { CreditCard, LogOut, Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
-import { createCategory, deleteAccount, deleteCategory, getSubscription, updateProfile } from '../lib/api';
+import { createCategory, deleteAccount, deleteCategory, getSubscription, openBillingPortal, updateProfile } from '../lib/api';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -14,7 +14,7 @@ import { Alert, Badge, Button, Card, CardHeader, Field, Input, Modal, PageHeader
 
 
 export default function Settings() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { profile, setProfile, session, usage, refreshUsage, signOut } = useAuth();
   const navigate = useNavigate();
   const { categories, setCategories } = useCategories();
@@ -26,6 +26,8 @@ export default function Settings() {
   const [sub, setSub] = useState<Subscription | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [sound, setSound] = useState(soundEnabled());
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   useEffect(() => { setForm(profile); }, [profile]);
   useEffect(() => { getSubscription().then(setSub).catch(() => undefined); void refreshUsage(); }, []);
@@ -66,7 +68,14 @@ export default function Settings() {
     try { await deleteCategory(id); setCategories(categories.filter((c) => c.id !== id)); } catch (err) { setCatError(errorMessage(t, err)); }
   };
 
-  const premium = sub?.plan === 'premium' && (sub.status === 'active' || sub.status === 'trialing');
+  // The plan shown is the one the SERVER computes (effective_plan), not a client-side guess.
+  const premium = usage?.plan === 'premium';
+  const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end).toLocaleDateString(locale, { dateStyle: 'long' }) : null;
+  const paymentProblem = sub?.has_billing_account && (sub.status === 'past_due' || sub.status === 'unpaid');
+  const manage = async () => {
+    setPortalBusy(true); setBillingError(null);
+    try { window.location.assign(await openBillingPortal()); } catch (e) { setBillingError(errorMessage(t, e)); setPortalBusy(false); }
+  };
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader title={t('settings.title')} subtitle={session?.user.email} action={usage?.is_admin
@@ -155,7 +164,17 @@ export default function Settings() {
             </>
           )}
           <p className="text-xs text-muted">{t('settings.manualUnlimited')}</p>
-          <p className="text-xs text-muted">{t('settings.billingSoon')}</p>
+          {paymentProblem && <Alert>{t('settings.paymentProblem')}</Alert>}
+          {premium && periodEnd && (
+            <p className="text-sm text-ink">{t(sub?.cancel_at_period_end ? 'settings.endsOn' : 'settings.renews').replace('{date}', periodEnd)}</p>
+          )}
+          {billingError && <Alert>{billingError}</Alert>}
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+            {sub?.has_billing_account && (
+              <Button variant="secondary" loading={portalBusy} icon={<CreditCard className="size-4" />} onClick={manage}>{t('pricing.manage')}</Button>
+            )}
+            {!premium && !paymentProblem && <Link to="/pricing"><Button className="w-full" icon={<Sparkles className="size-4" />}>{t('settings.upgrade')}</Button></Link>}
+          </div>
         </div>
       </Card>
 

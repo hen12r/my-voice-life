@@ -39,7 +39,17 @@ export interface CalendarEvent {
   all_day: boolean; category_id: string | null; created_at: string;
 }
 
-export interface Subscription { plan: 'free' | 'premium'; status: string; billing_interval: string | null; current_period_end: string | null }
+export interface Subscription {
+  plan: 'free' | 'premium'; status: string; billing_interval: string | null; current_period_end: string | null;
+  cancel_at_period_end: boolean; has_billing_account: boolean;
+}
+/** From the billing Edge Function: prices are read from Stripe, limits from mvl_plan_limits. */
+export interface BillingInfo {
+  configured: boolean;
+  test_mode: boolean;
+  prices: { interval: 'month' | 'year'; amount: number; currency: string }[];
+  limits: Record<string, { ai_captures_per_month: number; audio_minutes_per_month: number; max_capture_seconds: number }>;
+}
 /** From mvl_my_usage(): the caller's own AI allowance (counted on the server). */
 export interface MyUsage {
   plan: 'free' | 'premium';

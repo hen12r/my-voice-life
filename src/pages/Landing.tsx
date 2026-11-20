@@ -19,7 +19,10 @@ export default function Landing() {
     <div className="min-h-dvh bg-navy-950 text-white">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <Logo light />
-        <Link to="/login" className="rounded-xl px-4 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white">{t('landing.signin')}</Link>
+        <nav className="flex items-center gap-1">
+          <Link to="/pricing" className="rounded-xl px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white">{t('nav.pricing')}</Link>
+          <Link to="/login" className="rounded-xl px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white">{t('landing.signin')}</Link>
+        </nav>
       </header>
       <section className="mx-auto max-w-6xl px-5 pt-12 pb-20 text-center sm:pt-20">
         <p className="mb-5 text-xs font-medium tracking-[0.2em] text-accent-400 uppercase">{t('app.tagline')}</p>

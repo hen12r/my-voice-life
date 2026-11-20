@@ -99,3 +99,14 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Task completion feedback | ✅ | browser test |
 | PWA icons (PNG 192/512/maskable, apple-touch) | ✅ files / ⬜ install | manifest served; home-screen install not tested on a phone |
 
+## Payments: Stripe, test mode (2026-11-20, branch `claude/stripe-billing`)
+| Item | Status | Evidence |
+|---|---|---|
+| Migration 5: Stripe statuses, webhook ledger, service-role link/apply functions | ✅ tested locally / ⬜ not applied | `billing_test.sql` (40+ checks); rollback refusal, round trip and re-apply tested |
+| Webhook: signature, replay window, test/live separation, re-fetch, price allow-list, idempotency | ✅ offline / ⬜ live Stripe | 20 Deno tests + Vitest signature tests against Node crypto; mutation-checked |
+| Checkout and Customer Portal (server-side price, customer bound to user, origin allow-list) | ✅ offline / ⬜ live Stripe | 14 Deno tests; mutation-checked |
+| Account deletion cancels the Stripe subscription first | ✅ offline | 6 Deno tests |
+| Pricing page, success page (server-confirmed only), Settings plan card, en/fr | ✅ mocked browser | 11 browser scenarios at 360 px and desktop, 0 console errors |
+| Real test-mode run with a Stripe account | ⬜ | needs the owner's Stripe test account, secrets and approvals (`docs/STRIPE_SETUP.md`) |
+| Taxes/VAT, terms, refund policy, recorded revenue in admin | ⬜ | required before live payments |
+

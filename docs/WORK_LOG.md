@@ -66,5 +66,14 @@ Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the o
 - Tests: 105 unit, 27 Deno, 160 DB; typecheck and build pass.
 - **Awaiting approval:** migrations 3–4, tester row, function deploy, OpenAI key (adult), Google credentials.
 
+## 2026-11-20 — Stripe subscriptions, test mode (branch `claude/stripe-billing`, stacked on `claude/openai-voice`)
+- Inspected the architecture first. `subscriptions`, owner-read RLS, `effective_plan()` (active/trialing within the period) and table-driven limits already existed, so what was added is the sync path, not a new entitlement model.
+- **Migration 5** (local only): Stripe statuses, `mvl_stripe_events` idempotency ledger, `mvl_billing_link_customer`, `mvl_billing_apply_subscription` (service role only). Review: `docs/MIGRATION_5_BILLING_REVIEW.md`. Tested rollback.
+- **Edge Functions:** `billing` (public prices read from Stripe; checkout; portal), `stripe-webhook` (verified, re-fetches, idempotent), `delete-account` (cancels the subscription first). Test-mode lock: live keys refused without `STRIPE_LIVE_MODE_APPROVED=true`.
+- **Frontend:** Pricing page, `/app/billing/success` (waits for the server), Settings plan card (renewal/end date, failed payment, Manage subscription), en/fr.
+- Stripe facts checked on docs.stripe.com: signature scheme, item-level billing periods since basil, invoice→subscription path, current API version, endpoints and parameters.
+- **Tests:** DB billing suite and rollback; 41 new Deno tests (68 in total); Vitest 134+; 11 mocked browser scenarios; mutation checks.
+- **Not done:** no Stripe account was created or accessed; nothing deployed; no migration applied; no secret set.
+
 ## Earlier milestones
 See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.

@@ -27,6 +27,8 @@ run_test mvl_test supabase/tests/financial_test.sql
 
 run_test mvl_test supabase/tests/openai_multilingual_test.sql
 
+run_test mvl_test supabase/tests/billing_test.sql
+
 echo "== Scenario: rollback of migrations 3-4 (round trip, and refusals that protect data)"
 reset_db mvl_test
 migrate mvl_test
@@ -67,6 +69,29 @@ for f in supabase/migrations/20261119000001_*.sql supabase/migrations/2026111900
 [ "$($R -c "select count(*) from public.mvl_price_book where provider='openai'")" = 2 ] || { echo "FAIL  re-apply after rollback"; exit 1; }
 echo "PASS  migrations 3-4 re-apply cleanly after a rollback"
 echo "ALL ROLLBACK TESTS PASSED"
+
+echo "== Scenario: rollback of migration 5 (billing)"
+reset_db mvl_test
+migrate mvl_test
+R="psql -v ON_ERROR_STOP=1 -qtA -d mvl_test"
+RB5=supabase/rollback/rollback_20261120_migration_5_billing.sql
+$R -c "insert into auth.users (id, email) values ('66666666-0000-0000-0000-000000000001','rb5@test')"
+$R -c "set role service_role; select public.mvl_billing_link_customer('66666666-0000-0000-0000-000000000001','cus_Rb5')" >/dev/null
+if PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f "$RB5" >/dev/null 2>&1; then echo "FAIL  billing rollback should refuse when a Stripe customer is linked"; exit 1; fi
+[ "$($R -c "select count(*) from information_schema.tables where table_name='mvl_stripe_events'")" = 1 ] || { echo "FAIL  refused billing rollback changed the schema"; exit 1; }
+echo "PASS  billing rollback refuses (and changes nothing) once a Stripe customer is linked"
+$R -c "update public.subscriptions set stripe_customer_id = null"
+PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f "$RB5"
+CHECK5=$($R -c "select to_regclass('public.mvl_stripe_events') is null
+  and to_regprocedure('public.mvl_billing_link_customer(uuid,text)') is null
+  and (select count(*) from information_schema.columns where table_name='subscriptions' and column_name in ('cancel_at_period_end','stripe_price_id','stripe_livemode','stripe_synced_at')) = 0
+  and (select count(*) from pg_constraint where conname = 'subscriptions_status_check') = 1
+  and public.effective_plan('66666666-0000-0000-0000-000000000001') = 'free'")
+[ "$CHECK5" = t ] || { echo "FAIL  billing rollback did not restore the previous state"; exit 1; }
+echo "PASS  billing rollback restores the previous state"
+PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f supabase/migrations/20261120000001_mvl_stripe_billing.sql
+echo "PASS  migration 5 re-applies cleanly after a rollback"
+echo "ALL BILLING ROLLBACK TESTS PASSED"
 
 echo "== Scenario: concurrent requests cannot bypass limits or budgets"
 reset_db mvl_test
