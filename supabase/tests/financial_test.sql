@@ -236,6 +236,37 @@ do $$ declare u jsonb; f jsonb; begin
 end $$;
 reset role;
 
+-- ===================== Tester = voice access only, never admin =====================
+-- Stricter than expect_error: the failure must be an authorisation refusal (SQLSTATE 42501),
+-- not a typo or a bad argument.
+create or replace function pg_temp.expect_denied(sql text, label text) returns void language plpgsql as $$
+begin
+  begin execute sql;
+  exception when insufficient_privilege then raise notice 'PASS  %', label; return;
+            when others then raise exception 'FAIL  % (failed for the wrong reason: % %)', label, sqlstate, sqlerrm;
+  end;
+  raise exception 'FAIL  % (statement succeeded but should have been denied)', label;
+end $$;
+select pg_temp.as_user('e0000000-0000-0000-0000-000000000006');
+select pg_temp.expect((public.mvl_my_usage()->>'is_staff')::boolean, 'tester: is_staff true');
+select pg_temp.expect(not (public.mvl_my_usage()->>'is_admin')::boolean, 'tester: is_admin false');
+select pg_temp.expect(not public.mvl_is_admin(), 'tester: mvl_is_admin() false');
+select pg_temp.expect_denied($$select public.mvl_admin_usage_summary(null)$$, 'tester cannot read usage dashboard');
+select pg_temp.expect_denied($$select public.mvl_admin_finance_summary(null)$$, 'tester cannot read finance dashboard');
+select pg_temp.expect_denied($$select public.mvl_admin_update_settings(p_ai_mode => 'on')$$, 'tester cannot change settings or the kill switch');
+select pg_temp.expect_denied($$select public.mvl_admin_update_plan_limits('free', 999, 999, 999, 999, 999)$$, 'tester cannot change plan limits');
+select pg_temp.expect_denied($$select public.mvl_admin_add_expense(current_date, 'x', 'x', 1, 'USD', null, null)$$, 'tester cannot add expenses');
+select pg_temp.expect_denied($$select public.mvl_admin_delete_expense(1)$$, 'tester cannot delete expenses');
+select pg_temp.expect_denied($$select public.mvl_admin_ack_alert(1)$$, 'tester cannot acknowledge budget alerts');
+select pg_temp.expect_denied('select * from public.mvl_staff', 'tester cannot read the staff list');
+select pg_temp.expect_denied($$update public.mvl_staff set role = 'admin'$$, 'tester cannot promote itself to admin');
+select pg_temp.expect_denied($$insert into public.mvl_staff values ('f0000000-0000-0000-0000-000000000001', 'tester')$$, 'tester cannot grant access to others');
+select pg_temp.expect_denied($$select public.mvl_reserve_ai_capture('e0000000-0000-0000-0000-000000000006','text',0,'gemini','gemini-2.5-flash')$$, 'tester cannot bypass the Edge Function to reserve directly');
+select pg_temp.expect((select count(*) = 0 from public.notes where user_id <> 'e0000000-0000-0000-0000-000000000006'), 'tester sees no other user''s notes');
+select pg_temp.expect((select count(*) = 0 from public.mvl_ai_usage where user_id <> 'e0000000-0000-0000-0000-000000000006'), 'tester sees no other user''s usage');
+select set_config('request.jwt.claims', '', false);
+reset role;
+
 -- ===================== Account deletion =====================
 delete from auth.users where id = 'f0000000-0000-0000-0000-000000000001';
 select pg_temp.expect((select count(*) = 0 from public.mvl_daily_activity where user_id = 'f0000000-0000-0000-0000-000000000001'), 'deleting an account removes its activity rows');
