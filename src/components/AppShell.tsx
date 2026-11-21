@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Brain, CalendarClock, CheckSquare, Home, LogOut, Mic, NotebookPen, Settings, ShieldCheck } from 'lucide-react';
+import { Brain, CalendarClock, CheckSquare, CreditCard, Home, LogOut, Mic, NotebookPen, Settings, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n, type TranslationKey } from '../lib/i18n';
 import { cx } from './ui';
@@ -11,6 +11,7 @@ const NAV: { to: string; key: TranslationKey; icon: typeof Home }[] = [
   { to: '/app/schedule', key: 'nav.schedule', icon: CalendarClock },
   { to: '/app/memory', key: 'nav.memory', icon: Brain },
   { to: '/app/settings', key: 'nav.settings', icon: Settings },
+  { to: '/app/billing', key: 'nav.billing', icon: CreditCard },
 ];
 
 export function Logo({ light }: { light?: boolean }) {

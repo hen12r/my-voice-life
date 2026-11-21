@@ -5,9 +5,14 @@
 // Returns proposals only. Nothing is saved as a note/task/etc. until the client confirms.
 // Audio is processed in memory and never written to storage.
 //
-// Cost control: every capture must obtain a reservation from mvl_reserve_ai_capture()
-// (plan allowance, rate limits, daily/monthly budget, kill switch, test mode) BEFORE any paid
-// call. The audio length used for that check is read from the file itself (the client's claim
+// Two ways to pay for AI (decided per request, server-side):
+//   * BYOAI (default for users): the user's OWN OpenAI key, stored in Supabase Vault, read with the
+//     service-role-only RPC mvl_byoai_get_key(). Reservation: mvl_reserve_byoai_capture() (kill
+//     switch, byoai_mode, plan rate limits and max length). OpenAI bills the user.
+//   * Platform (staff testing only while ai_mode = admins_only): the project's OPENAI_API_KEY.
+//     Reservation: mvl_reserve_ai_capture() (plan allowance, rate limits, daily/monthly budget,
+//     kill switch, test mode).
+// Either way a reservation is obtained BEFORE any provider call. The audio length used for that check is read from the file itself (the client's claim
 // can only make it longer). Each call's real usage is recorded; failures close the reservation;
 // if accounting itself fails, the reservation is left to expire, which books its worst-case cost.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.48.1';
@@ -26,8 +31,10 @@ export const MIN_AUDIO_SECONDS = 0.5;
 const MAX_TEXT_CHARS = 10_000;
 
 export interface HandlerDeps {
-  /** Undefined when no provider key is configured → requests are refused with ai_not_configured. */
+  /** Platform provider (project key, staff testing). Undefined when OPENAI_API_KEY is not set. */
   provider: AiProvider | undefined;
+  /** Builds a provider for a user's OWN key (BYOAI). The key is used only for that request. */
+  userProvider?: (apiKey: string) => AiProvider;
   alertWebhookUrl?: string;
   /** Client acting as the caller (RLS applies). */
   userClient: (req: Request) => SupabaseClient;
@@ -125,18 +132,72 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
     }).catch((e) => console.error('alert webhook failed', e));
   }
 
-  async function recordTranscription(admin: SupabaseClient, reservation: string, seconds: number) {
-    const { error } = await admin.rpc('mvl_record_ai_transcription', { p_reservation: reservation, p_audio_seconds: seconds });
-    if (error) throw new AccountingError(`record transcription failed: ${error.message}`);
+  /** One open reservation: how usage is recorded and how it is closed, for either payment path. */
+  interface Accounting {
+    maxOutputTokens: number;
+    usageInfo: Record<string, unknown>;
+    transcription(seconds: number): Promise<void>;
+    text(usage: unknown, worstCase: { inputTokens: number; outputTokens: number }): Promise<void>;
+    finish(status: 'ok' | 'failed', code?: string): Promise<{ error: unknown }>;
+  }
+  type Reserved = Accounting | { refused: string };
+
+  /** Platform key (staff testing): allowance, rate limits, budgets, kill switch. */
+  async function reservePlatform(admin: SupabaseClient, userId: string, source: string, seconds: number, providerId: string, model: string): Promise<Reserved> {
+    const { data: r, error } = await admin.rpc('mvl_reserve_ai_capture', {
+      p_user: userId, p_source: source, p_audio_seconds: seconds, p_provider: providerId, p_model: model,
+    });
+    if (error || !r) {
+      console.error('process-voice: reservation error', error);
+      return { refused: 'accounting_unavailable' };
+    }
+    if (r.alert_created) notifyAdmin(String(r.reason ?? 'threshold'));
+    if (!r.ok) return { refused: String(r.reason) };
+    const id: string = r.reservation_id;
+    return {
+      maxOutputTokens: r.max_output_tokens,
+      usageInfo: { plan: r.plan, captures_used: r.captures_used, captures_limit: r.captures_limit, minutes_used: r.minutes_used, minutes_limit: r.minutes_limit },
+      async transcription(sec) {
+        const { error } = await admin.rpc('mvl_record_ai_transcription', { p_reservation: id, p_audio_seconds: sec });
+        if (error) throw new AccountingError(`record transcription failed: ${error.message}`);
+      },
+      async text(usage, worstCase) {
+        const u = parseResponsesUsage(usage, worstCase);
+        const { error } = await admin.rpc('mvl_record_ai_call', {
+          p_reservation: id, p_audio_tokens: 0, p_text_in_tokens: u.text_in_tokens,
+          p_output_tokens: u.output_tokens, p_thinking_tokens: u.thinking_tokens,
+        });
+        if (error) throw new AccountingError(`record failed: ${error.message}`);
+      },
+      finish: (status, code) => admin.rpc('mvl_finish_ai_capture', { p_reservation: id, p_status: status, p_error_code: code ?? null }) as unknown as Promise<{ error: unknown }>,
+    };
   }
 
-  async function recordTextCall(admin: SupabaseClient, reservation: string, usage: unknown, worstCase: { inputTokens: number; outputTokens: number }) {
-    const u = parseResponsesUsage(usage, worstCase);
-    const { error } = await admin.rpc('mvl_record_ai_call', {
-      p_reservation: reservation, p_audio_tokens: 0, p_text_in_tokens: u.text_in_tokens,
-      p_output_tokens: u.output_tokens, p_thinking_tokens: u.thinking_tokens,
-    });
-    if (error) throw new AccountingError(`record failed: ${error.message}`);
+  /** User's own key (BYOAI): kill switch, byoai_mode, plan rate limits and max length. No platform budget. */
+  async function reserveByoai(admin: SupabaseClient, userId: string, source: string, seconds: number): Promise<Reserved> {
+    const { data: r, error } = await admin.rpc('mvl_reserve_byoai_capture', { p_user: userId, p_source: source, p_audio_seconds: seconds });
+    if (error || !r) {
+      console.error('process-voice: BYOAI reservation error', error);
+      return { refused: 'accounting_unavailable' };
+    }
+    if (!r.ok) return { refused: String(r.reason) };
+    const id: string = r.reservation_id;
+    return {
+      maxOutputTokens: r.max_output_tokens ?? 2048,
+      usageInfo: { plan: r.plan, byoai: true },
+      async transcription(sec) {
+        const { error } = await admin.rpc('mvl_record_byoai_call', { p_reservation: id, p_audio_seconds: sec, p_input_tokens: 0, p_output_tokens: 0 });
+        if (error) throw new AccountingError(`record transcription failed: ${error.message}`);
+      },
+      async text(usage, worstCase) {
+        const u = parseResponsesUsage(usage, worstCase);
+        const { error } = await admin.rpc('mvl_record_byoai_call', {
+          p_reservation: id, p_audio_seconds: 0, p_input_tokens: u.text_in_tokens, p_output_tokens: u.output_tokens + u.thinking_tokens,
+        });
+        if (error) throw new AccountingError(`record failed: ${error.message}`);
+      },
+      finish: (status, code) => admin.rpc('mvl_finish_byoai_capture', { p_reservation: id, p_status: status, p_error_code: code ?? null }) as unknown as Promise<{ error: unknown }>,
+    };
   }
 
   return async function handler(req: Request): Promise<Response> {
@@ -145,11 +206,29 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
     const supabase = deps.userClient(req);
     const { data: userData, error: authError } = await supabase.auth.getUser();
     if (authError || !userData?.user) return fail(req, 401, 'unauthorized', 'Sign in required');
-    // Checked after authentication so anonymous callers learn nothing about configuration.
-    const provider = deps.provider;
-    if (!provider) return fail(req, 503, 'ai_not_configured', 'OPENAI_API_KEY secret is not set on this project');
     const userId = userData.user.id;
     const admin = deps.adminClient();
+
+    // ---- 0. Which key pays? The user's own (BYOAI) first, else the platform key (staff testing). ----
+    // Checked after authentication so anonymous callers learn nothing about configuration.
+    let provider: AiProvider;
+    let byoai = false;
+    if (deps.userProvider) {
+      const { data: userKey, error: keyError } = await admin.rpc('mvl_byoai_get_key', { p_user: userId, p_provider: 'openai' });
+      if (keyError) {
+        console.error(`process-voice: key lookup failed (${(keyError as { code?: string }).code ?? 'error'})`);
+        return fail(req, 503, 'accounting_unavailable', 'Usage accounting is unavailable; AI is paused for safety.');
+      }
+      if (typeof userKey === 'string' && userKey) { provider = deps.userProvider(userKey); byoai = true; }
+    }
+    if (!byoai) {
+      if (!deps.provider) {
+        return deps.userProvider
+          ? fail(req, 403, 'ai_key_required', 'Connect your own OpenAI key to use voice')
+          : fail(req, 503, 'ai_not_configured', 'OPENAI_API_KEY secret is not set on this project');
+      }
+      provider = deps.provider;
+    }
 
     // ---- 1. Validate and measure the input (no paid calls yet) ----
     let input: ValidInput;
@@ -161,32 +240,19 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
       return fail(req, 400, 'bad_request', 'The request could not be read');
     }
     const { source, timezone, languages, durationMs, audio, typedText } = input;
-    const priceModel = audio ? provider.voicePriceModel : provider.textPriceModel;
+    const priceModel = audio ? provider!.voicePriceModel : provider!.textPriceModel;
 
-    // ---- 2. Reserve: allowance, rate limits, budgets, kill switch (atomic, in the DB) ----
-    const { data: reservation, error: resError } = await admin.rpc('mvl_reserve_ai_capture', {
-      p_user: userId, p_source: source, p_audio_seconds: audio?.seconds ?? 0, p_provider: provider.id, p_model: priceModel,
-    });
-    if (resError || !reservation) {
-      console.error('process-voice: reservation error', resError);
-      return fail(req, 503, 'accounting_unavailable', 'Usage accounting is unavailable; AI is paused for safety.');
+    // ---- 2. Reserve (atomic, in the DB) ----
+    const acct = byoai
+      ? await reserveByoai(admin, userId, source, audio?.seconds ?? 0)
+      : await reservePlatform(admin, userId, source, audio?.seconds ?? 0, provider!.id, priceModel);
+    if ('refused' in acct) {
+      if (acct.refused === 'accounting_unavailable') return fail(req, 503, 'accounting_unavailable', 'Usage accounting is unavailable; AI is paused for safety.');
+      return fail(req, refusalStatus(acct.refused), acct.refused, 'AI request refused by usage controls');
     }
-    if (reservation.alert_created) notifyAdmin(String(reservation.reason ?? 'threshold'));
-    if (!reservation.ok) {
-      const reason = String(reservation.reason);
-      return fail(req, refusalStatus(reason), reason, 'AI request refused by usage controls');
-    }
+    const providerLabel = `${byoai ? 'byoai-' : ''}${provider!.id}:${audio ? priceModel : provider!.textModel}`;
 
-    const reservationId: string = reservation.reservation_id;
-    const maxOutputTokens: number = reservation.max_output_tokens;
-    const usageInfo = {
-      plan: reservation.plan,
-      captures_used: reservation.captures_used, captures_limit: reservation.captures_limit,
-      minutes_used: reservation.minutes_used, minutes_limit: reservation.minutes_limit,
-    };
-    const providerLabel = `${provider.id}:${audio ? priceModel : provider.textModel}`;
-
-    // ---- 3. Paid calls, each recorded ----
+    // ---- 3. Provider calls, each recorded ----
     let stage: 'transcription' | 'extraction' = 'transcription';
     try {
       let transcript = typedText;
@@ -194,21 +260,21 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
       if (audio) {
         let t;
         try {
-          t = await provider.transcribe(audio.blob, audio.extension, languages);
+          t = await provider!.transcribe(audio.blob, audio.extension, languages);
         } catch (err) {
           // The provider may have processed (and billed) a request that timed out or failed on
-          // its side: book the measured length so spend is never under-counted.
+          // its side: book the measured length so usage is never under-counted.
           if (!(err instanceof UpstreamError && err.status >= 400 && err.status < 500)) {
-            await recordTranscription(admin, reservationId, audio.seconds);
+            await acct.transcription(audio.seconds);
           }
           throw err;
         }
-        await recordTranscription(admin, reservationId, transcriptionSeconds(t.usage, audio.seconds).seconds);
+        await acct.transcription(transcriptionSeconds(t.usage, audio.seconds).seconds);
         transcript = transcriptText(t.data, MAX_TEXT_CHARS);
       }
 
       if (!transcript) {
-        await admin.rpc('mvl_finish_ai_capture', { p_reservation: reservationId, p_status: 'failed', p_error_code: 'no_speech' });
+        await acct.finish('failed', 'no_speech');
         await supabase.from('voice_sessions').insert({ source, status: 'failed', error: 'no_speech', duration_ms: durationMs, provider: providerLabel });
         return fail(req, 422, 'no_speech', 'No speech was detected');
       }
@@ -220,10 +286,10 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
       const instructions = buildExtractionInstructions({ today: date, weekday, timezone, categories });
       const userInput = extractionInput(transcript);
 
-      const e = await provider.extract({ instructions, input: userInput, maxOutputTokens });
+      const e = await provider!.extract({ instructions, input: userInput, maxOutputTokens: acct.maxOutputTokens });
       // Worst case if usage is missing: ~1 token per 2 characters in, the full output cap out.
-      await recordTextCall(admin, reservationId, e.usage, {
-        inputTokens: Math.ceil((instructions.length + userInput.length) / 2), outputTokens: maxOutputTokens,
+      await acct.text(e.usage, {
+        inputTokens: Math.ceil((instructions.length + userInput.length) / 2), outputTokens: acct.maxOutputTokens,
       });
       if (e.parseError) throw e.parseError;
 
@@ -238,22 +304,41 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
       }).select('id').single();
       if (insertError) throw new Error(`Could not record session: ${insertError.message}`);
 
-      const { error: finError } = await admin.rpc('mvl_finish_ai_capture', { p_reservation: reservationId, p_status: 'ok' });
+      const { error: finError } = await acct.finish('ok');
       if (finError) console.error('process-voice: finish failed (reservation will expire conservatively)', finError);
 
       return json(req, 200, {
-        session_id: session.id, transcript, language, today: date, timezone, usage: usageInfo,
+        session_id: session.id, transcript, language, today: date, timezone, usage: acct.usageInfo,
         duration_verified: audio ? audio.verified : null, ...result,
       });
     } catch (err) {
       console.error(`process-voice failed during ${stage}`, err);
       if (!(err instanceof AccountingError)) {
-        // Close the reservation as failed: recorded cost stays, the monthly allowance is not used.
+        // Close the reservation as failed: recorded usage stays, the allowance is not used.
         const code = err instanceof UpstreamError ? `upstream_${err.status}` : 'internal';
-        const { error } = await admin.rpc('mvl_finish_ai_capture', { p_reservation: reservationId, p_status: 'failed', p_error_code: code });
+        const { error } = await acct.finish('failed', code);
         if (error) console.error('process-voice: could not close reservation', error);
-      } // AccountingError: leave 'reserved' → expires with worst-case cost (never under-counts spend)
+      } // AccountingError: leave 'reserved' → expires (platform: at worst-case cost)
       if (err instanceof UpstreamError) {
+        if (byoai) {
+          // The USER's key: tell the user what to fix. Never log or return the key.
+          if (err.status === 401) {
+            const { error } = await admin.rpc('mvl_byoai_mark_invalid', { p_user: userId, p_provider: 'openai' });
+            if (error) console.error('process-voice: could not mark the user key invalid');
+            console.warn('process-voice: a user-provided OpenAI key was rejected (401); marked invalid');
+            return fail(req, 400, 'ai_key_invalid', 'Your OpenAI key was rejected. Connect a new key.');
+          }
+          if (err.status === 403) return fail(req, 403, 'ai_key_no_model_access', `Your OpenAI project must allow ${provider!.transcribeModel} and ${provider!.textModel}.`);
+          if (err.status === 429 && /insufficient_quota/.test(err.message)) return fail(req, 402, 'ai_key_no_credit', 'Your OpenAI account has no credit left.');
+        } else if (err.status === 401 || err.status === 403) {
+          // Wrong, revoked or project-restricted key, or a model the key's project may not use.
+          // A setup problem, not an outage: say so plainly in the logs (never the key itself).
+          console.error(`process-voice: OpenAI refused the request (HTTP ${err.status}). Check the OPENAI_API_KEY secret in Supabase → Edge Functions → Secrets, and that the key's project allows ${provider!.transcribeModel} and ${provider!.textModel}.`);
+          return fail(req, 503, 'ai_not_configured', 'The AI provider rejected the server configuration.');
+        }
+        if (err.status === 404) {
+          console.error(`process-voice: OpenAI returned 404. A configured model (${provider!.transcribeModel} / ${provider!.textModel}) may not exist or may not be available to this key.`);
+        }
         if (err.status === 429) return fail(req, 503, 'ai_busy', 'The AI provider is rate limiting requests. Try again shortly.');
         if (err.status === 400 || err.status === 413 || err.status === 415) return fail(req, 422, 'ai_rejected_input', 'The AI provider could not process this recording.');
         return fail(req, 502, 'ai_unavailable', 'The AI provider is unavailable.');

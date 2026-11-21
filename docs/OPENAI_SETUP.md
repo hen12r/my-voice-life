@@ -1,103 +1,95 @@
 # OpenAI setup (voice → transcript → organised items)
 
-**Status:** implemented and tested locally against fakes, on branch `claude/openai-voice`. **Not live:**
-- no OpenAI account or key is connected;
-- the two new migrations are not applied;
-- the `process-voice` function is not deployed.
+This page is for the **responsible adult** who manages the OpenAI account, and for anyone checking that the integration is ready. The code is ready. **The only missing piece is the `OPENAI_API_KEY` secret in Supabase.** Nobody ever needs to send the key to anyone: it is typed directly into the Supabase dashboard and stays there.
 
-Every step below that touches a real service needs the owner's approval. The API account, billing and key are managed by the **responsible adult**.
+## Status (checked read-only on 2026-11-20)
+| Item | State |
+|---|---|
+| `process-voice` Edge Function | ✅ deployed and active on Supabase `my-voice-life` (`nwglzabnezhmxfyuxhmg`), JWT verification on |
+| Database (migrations 1–5, OpenAI price rows) | ✅ applied |
+| Owner's test account | ✅ `tester` role (can use AI while it is staff-only; not an admin) |
+| Browser origin (CORS) | ✅ Vercel previews of this project are allowed by default; production needs `ALLOWED_ORIGINS` |
+| **`OPENAI_API_KEY` secret** | ❌ **not set**: Edge Functions → Secrets shows "No custom secrets created" |
+| Live voice capture | ⬜ never run. Every capture currently gets `ai_not_configured`, before any cost |
 
-## What the app uses (verified on developers.openai.com, 2026-11-19)
-| Stage | Model | Price | Why |
+Once the key is saved, voice capture works on the next request. The function reads secrets when it starts, so nothing needs redeploying.
+
+> **What has and has not been tested.** The pipeline (measure → reserve → transcribe → record → extract → record → finish) is covered by 30 automated tests. They use **fake** OpenAI replies, shaped like OpenAI's documented responses, plus real browser recordings. These fakes are **not** real OpenAI output. No request has ever reached OpenAI from this project. Transcription quality and extraction quality can only be judged after the first live tests.
+
+## How the key is handled in the code
+- **Read only on the server.** `supabase/functions/process-voice/index.ts` reads `Deno.env.get('OPENAI_API_KEY')` once, inside the Edge Function. It is never in the repository, Vercel, a `VITE_*` variable, or the browser bundle. The build refuses to start if a `VITE_*` variable looks like a key.
+- **Pasting mistakes are tolerated.** Spaces, a trailing line break or surrounding quotes are removed (`_shared/secrets.ts`, `normaliseApiKey`). A key with a space or line break *inside* it is refused, because it could never work. Startup warnings describe the problem and never include any part of the key.
+- **Sent only to OpenAI.** The key is used only in the `Authorization` header of requests to `https://api.openai.com/v1`. A test checks it never goes to any other address and never appears in a response.
+- **Never logged.** OpenAI's "wrong key" error message echoes a masked fragment of the key, so every upstream error text is passed through `redactSecrets` before logging. Tests check the logs contain no key fragment.
+- **The browser gets generic messages.** The browser only receives an error code (for example `ai_not_configured`). Configuration details stay in the server logs.
+- **Missing key = no cost.** Without a key, a signed-in user gets `ai_not_configured` before any reservation or paid call. Anonymous callers get `401` and learn nothing about the configuration.
+
+## The pipeline (verified against developers.openai.com on 2026-11-19 and 2026-11-20)
+| Stage | What happens | Model and endpoint | Price (in `mvl_price_book`) |
 |---|---|---|---|
-| Speech → text | `gpt-transcribe` | **$0.0045 per minute** of audio | OpenAI's current recommended file-transcription model. Accepts several expected languages (`languages`) for mixed-language speech. |
-| Text → items | `gpt-6-luna` (Responses API) | **$0.10 / $0.50** per 1M input/output tokens | Cheapest current model with Structured Outputs. Called with `reasoning.effort: none` (no paid reasoning) and `store: false` (OpenAI does not keep the content). |
+| 1. Measure | The recording's real length is read from the file (WebM/Ogg/MP4). A client can't under-declare it | none | free |
+| 2. Reserve | `mvl_reserve_ai_capture` checks allowance, rate limits, daily and monthly budget, kill switch and staff-only mode, and holds the worst-case cost | none | free |
+| 3. Transcribe | Audio → text, with up to 3 expected languages as hints (retried once without hints if OpenAI rejects them) | `gpt-transcribe`, `POST /v1/audio/transcriptions` | $0.0045 per minute |
+| 4. Extract | Transcript → notes, tasks, reminders and events, using a **strict JSON schema** (Structured Outputs), `reasoning.effort: "none"`, `store: false` and an output-token cap | `gpt-6-luna`, `POST /v1/responses` | $0.10 / $0.50 per 1M input/output tokens |
+| 5. Validate | `validateExtraction` cleans every item: no invented dates, unknown categories dropped, bounded lengths | none | free |
+| 6. Review | The app shows proposals. **Nothing is saved until the user accepts each item** | none | free |
 
-A typical 1-minute voice note costs about **$0.005**. The app's own server-side limits stay in force:
-- 7 free captures per month;
-- premium: 300 captures and 600 minutes per month;
-- $2/day and $20/month hard budgets;
-- kill switch;
-- `admins_only` test mode.
+Each paid call records its real usage (seconds, tokens). Failures close the reservation, and the monthly allowance isn't used. If the cost tracking itself fails, the reservation expires at its worst-case cost, so spend is never under-counted. A typical one-minute note costs about **$0.005**.
 
-The worst-case cost of each capture is reserved **before** any paid call. The audio length used for that check is read from the recording file itself, so a client cannot under-declare it.
+## Setup steps (responsible adult)
 
-Prices live in `mvl_price_book` (rows `openai / gpt-transcribe+gpt-6-luna` and `openai / gpt-6-luna`), not in code. If you switch models, add matching price rows first, otherwise AI fails closed (`ai_price_unknown`).
+### 1. OpenAI account and key
+1. Sign in at **platform.openai.com**. The API terms require an adult account holder.
+2. **Billing:** add a small prepaid credit, for example $5–10. These models have no free tier.
+3. **Limits:** set a monthly budget and an email alert under Settings → Billing → Limits. OpenAI's limit may only notify you. The app's own $2/day and $20/month budgets are what actually block spending.
+4. Create a **project** named "My Voice Life", then an **API key restricted to that project**.
+5. Recommended: in the project's model settings, allow only `gpt-transcribe` and `gpt-6-luna`. If you do, keep both allowed. Blocking either one makes captures fail with `ai_not_configured`, and the logs explain why.
 
-## 1. OpenAI account (responsible adult)
-1. Create or sign in to an account at **platform.openai.com**. The API terms require an adult account holder.
-2. **Billing:** add a small prepaid credit (for example $5–10 for testing). The API has no free tier for these models.
-3. **Limits:** set a monthly budget and email alert under Billing → Limits.
-   - Like Google's budgets, this may only *notify*.
-   - The app's own $2/day and $20/month stops are what actually block spending.
-4. Create a **project** for My Voice Life, and an API key **restricted to that project**.
-5. Optional but recommended: in the project settings, allow only the models `gpt-transcribe` and `gpt-6-luna`.
+### 2. Save the secret in Supabase (the only step the app still needs)
+1. Open **https://supabase.com/dashboard/project/nwglzabnezhmxfyuxhmg/functions/secrets**.
+2. Under **Add or replace secrets**: Name = `OPENAI_API_KEY`, Value = paste the key.
+3. Click **Save**. The key should then appear under "Custom secrets", with a digest and a date. Supabase never shows the value again.
 
-Never paste the key into chat, GitHub, Vercel, a `VITE_*` variable or any file in the repository. The build refuses to start if a `VITE_*` variable looks like a key.
+**Never** paste the key into chat (including with an AI assistant), GitHub, Vercel, an email, a screenshot or any file in the repository. If it was exposed, revoke it on platform.openai.com and create a new one.
 
-## 2. Supabase Edge Function secrets
-In the Supabase dashboard, open project **my-voice-life** (`nwglzabnezhmxfyuxhmg`), then Edge Functions → **Secrets**, and add:
-
-| Name | Value |
+Optional secrets (normally leave them unset):
+| Name | When to set it |
 |---|---|
-| `OPENAI_API_KEY` | the key from step 1 (typed directly into the dashboard) |
-| `ALLOWED_ORIGINS` | the app's origin(s), comma-separated, e.g. `https://my-voice-life-git-claude-wonderful-gauss-4zwbs1-henry7.vercel.app` |
-| `ALERT_WEBHOOK_URL` | optional: a webhook for budget alerts (no user data is ever sent) |
+| `ALLOWED_ORIGINS` | **before production**: the exact production address, e.g. `https://my-voice-life.vercel.app`. Without it, only this project's Vercel previews and `localhost:3000` are allowed |
+| `ALERT_WEBHOOK_URL` | a webhook that receives budget alerts (no user data is ever sent) |
+| `OPENAI_TRANSCRIBE_MODEL`, `OPENAI_TEXT_MODEL` | only to switch models. Add matching `mvl_price_book` rows **first**, or AI fails closed with `ai_price_unknown` |
 
-Optional overrides (normally leave unset): `OPENAI_TRANSCRIBE_MODEL`, `OPENAI_TEXT_MODEL`.
+### 3. Check it works (about 2 minutes)
+1. Open the latest preview: `https://my-voice-life-git-claude-stripe-billing-henry7.vercel.app`. Sign in with the tester account.
+2. Go to **Speak** and record about 10 seconds, for example "Tomorrow at 10 I need to call my school, and I have to buy a notebook."
+3. Expected: a transcript, then review cards (a task or reminder dated tomorrow, and a task to buy a notebook). Accept them and save, then check Tasks and Schedule.
+4. Read-only database checks (SQL editor, or ask the assistant):
+   ```sql
+   select status, provider, model, audio_seconds, est_cost_usd from public.mvl_ai_usage order by occurred_at desc limit 3;
+   -- expect: status ok, provider openai, audio_seconds ≈ the recording length, cost well under $0.01
+   select status, detected_language from public.voice_sessions order by created_at desc limit 3;
+   -- expect: status extracted (or committed once items were saved)
+   ```
 
-Remove any old `GEMINI_API_KEY` secret: the code no longer reads it.
+## Troubleshooting
+| What the app shows | Server log says | What to do |
+|---|---|---|
+| `ai_not_configured` right away | "OPENAI_API_KEY is not configured" | The secret is missing or empty. Repeat step 2 |
+| `ai_not_configured` after recording | "OpenAI refused the request (HTTP 401)" | The key is wrong or revoked. Create a new key and replace the secret |
+| `ai_not_configured` after recording | "OpenAI refused the request (HTTP 403)" | The key's project doesn't allow `gpt-transcribe` or `gpt-6-luna`. Allow both models (step 1.5) |
+| `ai_unavailable` | "OpenAI returned 404" | A model name doesn't exist for this key. Remove any `OPENAI_*_MODEL` overrides |
+| `ai_busy` | 429 | OpenAI rate limit or no credit left. Check billing on platform.openai.com |
+| `ai_test_mode` | — | The account isn't staff while AI is staff-only. Check the `mvl_staff` row |
+| `quota_*`, `rate_limited_*`, `budget_*` | — | One of the app's own limits stopped the request, before any cost |
+| `unsupported_audio` | — | The recording isn't WebM/Ogg/MP4, so its length couldn't be checked |
+| `ai_timeout` | — | OpenAI didn't answer in time. The measured length is still booked as spend |
+| a CORS or network error in the browser | — | The page's address isn't allowed. Use a preview of this project, or set `ALLOWED_ORIGINS` |
 
-## 3. Database migrations (needs approval)
-Two additive migrations:
-- `20261119000001_mvl_openai_pricing.sql`
-- `20261119000002_mvl_multilingual.sql`
+Server logs: Supabase → Edge Functions → `process-voice` → Logs. They never contain the key.
 
-See `docs/MIGRATION_REVIEW.md` §3–4. Apply them the same way as the first two, after a dry run.
-
-## 4. Deploy the function (needs approval)
+## Running the automated tests
 ```bash
-npx supabase@3.2.0 functions deploy process-voice --project-ref nwglzabnezhmxfyuxhmg
+npm test                 # Vitest: includes _shared/secrets.test.ts (key reading and redaction)
+npm run test:functions   # Deno: process-voice orchestration with FAKE OpenAI/Supabase and real recordings
 ```
-`verify_jwt = true` stays on, so only signed-in users can call it.
-
-## 5. Least-privileged tester access for the owner's account (needs approval)
-A **tester** can use AI while it is in `admins_only` mode. A tester **cannot** open the admin dashboard, change limits or budgets, or see anyone else's data: every admin function checks for the `admin` role.
-
-This is the exact change. It adds one row, and changes nothing else:
-```sql
-insert into public.mvl_staff (user_id, role)
-select id, 'tester' from auth.users where email = 'OWNER-EMAIL'
-on conflict (user_id) do nothing;
-```
-To check it, run this while signed in as the owner (or with the SQL editor's "impersonate user"):
-```sql
-select public.mvl_my_usage() ->> 'is_staff' as is_staff,   -- true
-       public.mvl_my_usage() ->> 'is_admin' as is_admin;   -- false
-```
-To undo it:
-```sql
-delete from public.mvl_staff where role = 'tester'
-  and user_id = (select id from auth.users where email = 'OWNER-EMAIL');
-```
-
-## 6. First live test (after steps 1–5)
-1. Open the preview and go to Speak. The microphone button should now be enabled; it was greyed out before because the account was not staff.
-2. Record "Tomorrow I need to call my school, prepare my CV and practise piano."
-3. Expect three task cards dated tomorrow. Edit one, reject one, save.
-4. In the admin dashboard (admin only) or with SQL, check the ledger row:
-   - `provider = openai`;
-   - `audio_seconds` ≈ the recording length;
-   - `est_cost_usd` ≈ $0.0003–0.001.
-5. Then run the language test sheet (`docs/LANGUAGES.md`).
-
-## Error codes the app can show
-| Code | Meaning |
-|---|---|
-| `ai_not_configured` | No `OPENAI_API_KEY` secret is set. |
-| `ai_test_mode` | AI is limited to staff and this account is not staff. |
-| `quota_*`, `rate_limited_*`, `budget_*` | A usage control refused the request before any cost. |
-| `unsupported_audio` | Not a WebM/Ogg/MP4 recording, so its length could not be checked. |
-| `ai_busy` | OpenAI is rate limiting. |
-| `ai_unavailable` | OpenAI error or bad key. Check the function logs; the key is never logged. |
-| `ai_timeout` | No answer in time. The measured length is still booked as spend. |
+The tests need no key and make no network calls. Their OpenAI replies are hand-written fakes that copy the documented response *shapes*. They prove the code's behaviour, not OpenAI's.

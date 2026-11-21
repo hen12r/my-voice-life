@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { AlertTriangle, Bell, CalendarDays, Check, CheckSquare, Heart, Keyboard, Lightbulb, Mic, Pencil, RotateCcw, Square, StickyNote, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
+import { voiceAccess } from '../lib/plans';
 import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
 import { commitItems, createNote, DEFAULT_REMINDER_TIME, listCategories, processAudio, processText, type ProcessResult, type ReviewedItem } from '../lib/api';
 import { ITEM_TYPES, type ItemType } from '../../supabase/functions/_shared/extraction.ts';
@@ -19,11 +20,14 @@ export default function Capture() {
   const { t } = useI18n();
   const { profile, usage, refreshUsage } = useAuth();
   const [params] = useSearchParams();
-  const maxMs = usage ? usage.max_capture_seconds * 1000 : DEFAULT_MAX_RECORDING_MS;
+  const access = usage ? voiceAccess(usage) : null;
+  const maxMs = access && access.mode !== 'blocked' ? access.maxSeconds * 1000 : DEFAULT_MAX_RECORDING_MS;
   const recorder = useRecorder(maxMs);
   // Server-counted allowance. The server enforces it regardless; this only explains the state.
-  const limitReached = !!usage && (usage.captures_used >= usage.captures_limit || usage.minutes_used >= usage.minutes_limit);
-  const aiBlocked = !!usage && (!usage.ai_available || limitReached);
+  const limitReached = !!access && (access.mode === 'platform'
+    ? (usage!.captures_used >= usage!.captures_limit || usage!.minutes_used >= usage!.minutes_limit)
+    : access.mode === 'byoai' && access.perDay > 0 && access.usedToday >= access.perDay);
+  const aiBlocked = !!access && (access.mode === 'blocked' || limitReached);
   const [phase, setPhase] = useState<Phase>('input');
   const [typed, setTyped] = useState('');
   const [showTyping, setShowTyping] = useState(params.get('mode') === 'text');
@@ -189,16 +193,21 @@ export default function Capture() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t('capture.title')} subtitle={t('capture.subtitle')} />
-      {usage && usage.ai_available && <AllowanceBar usage={usage} />}
-      {usage && !usage.ai_available && (
+      {usage && access?.mode === 'platform' && <AllowanceBar usage={usage} />}
+      {access?.mode === 'byoai' && (
+        <div className="mb-4 rounded-xl bg-white px-4 py-2.5 text-xs text-muted shadow-sm">
+          {t('usage.byoaiToday').replace('{n}', String(access.usedToday)).replace('{m}', String(access.perDay))}
+        </div>
+      )}
+      {usage && access?.mode === 'blocked' && (
         <div className="mb-4"><Alert kind="info">
-          {usage.ai_paused_message || t(usage.ai_mode === 'off' ? 'errors.ai_paused' : 'errors.ai_test_mode')}{' '}
-          <Link to="/app/notes" className="font-medium underline">{t('usage.writeInstead')}</Link>
+          {(access.reason === 'errors.ai_paused' && usage.ai_paused_message) || t(access.reason)}{' '}
+          <Link to={access.fixLink} className="font-medium underline">{t(access.fixLink === '/app/settings' ? 'usage.connectKey' : 'usage.writeInstead')}</Link>
         </Alert></div>
       )}
-      {usage && usage.ai_available && limitReached && (
+      {access && access.mode !== 'blocked' && limitReached && (
         <div className="mb-4"><Alert kind="info">
-          {t(usage.captures_used >= usage.captures_limit ? 'errors.quota_captures' : 'errors.quota_minutes')}{' '}
+          {t(access.mode === 'byoai' ? 'errors.rate_limited_day' : usage!.captures_used >= usage!.captures_limit ? 'errors.quota_captures' : 'errors.quota_minutes')}{' '}
           <Link to="/app/notes" className="font-medium underline">{t('usage.writeInstead')}</Link>
         </Alert></div>
       )}

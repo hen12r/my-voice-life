@@ -65,7 +65,7 @@ export default function Tasks() {
                 const cat = task.category_id ? byId.get(task.category_id) : null;
                 return (
                   <li key={task.id} className="flex items-start gap-3 px-4 py-3">
-                    <button onClick={() => toggle(task)} className="mt-0.5 text-muted hover:text-accent-600" aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')}>
+                    <button onClick={() => toggle(task)} className="-m-2 mt-[-0.375rem] rounded-full p-2 text-muted hover:text-accent-600" aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')}>
                       {task.status === 'done' ? <CheckCircle2 className={cx('size-5 text-emerald-600', justDone.has(task.id) && 'animate-pop')} /> : <Circle className="size-5" />}
                     </button>
                     <div className="min-w-0 flex-1">

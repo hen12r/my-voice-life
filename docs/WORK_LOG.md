@@ -2,6 +2,21 @@
 
 A record of completed and unfinished work. Newest first. "Verified" means a test or tool output shows it; anything else is labelled.
 
+## 2026-11-20 — OpenAI integration readiness (branch `claude/stripe-billing`)
+Audit of `process-voice` against developers.openai.com: the `gpt-transcribe` (`/v1/audio/transcriptions`, multiple language hints) and `gpt-6-luna` (`/v1/responses`, `reasoning.effort: none`, Structured Outputs) model IDs and options exist as used. No key handled, no deploy, no migration, no secret changed.
+
+| Change | Why | Evidence |
+|---|---|---|
+| `_shared/secrets.ts`: `redactSecrets`, used on every OpenAI error text and on the language-hint retry warning | OpenAI's 401 body echoes a masked key fragment, which went into Supabase logs, and the retry warning logged the raw body | Vitest `secrets.test.ts`; Deno test "wrong or revoked key (401)…": with redaction removed, it **fails** (mutation check) |
+| `normaliseApiKey` in `index.ts` | A key pasted with a trailing line break or quotes made every request throw a generic error, and booked the recording as spent | Vitest cases for spaces, quotes, inner whitespace, and warnings that never include the key |
+| OpenAI 401/403 → `ai_not_configured` plus a setup hint in the log; 404 → a model hint | A wrong, revoked or model-restricted key used to show as a generic `ai_unavailable` with no clue | 2 new Deno tests (not billed when refused; the browser gets no configuration details) |
+| Test: the key goes only to `api.openai.com` and is never in a response | Locks in the existing behaviour | Deno test |
+| `docs/OPENAI_SETUP.md` rewritten (current live status, key handling, setup, check, troubleshooting) | It still said the function was not deployed | — |
+
+Tests: Vitest 147/147, Deno `process-voice` 30/30, all function tests and type checks pass. **All OpenAI replies in tests are fakes**; no request has reached OpenAI.
+
+**Still blocked (needs an adult):** `OPENAI_API_KEY` in Supabase Edge Function secrets (re-checked: "No custom secrets created"). Then a live capture test (`docs/OPENAI_SETUP.md` §3). Before production: `ALLOWED_ORIGINS`.
+
 ## 2026-11-18/19 — autonomous cloud session (branch `claude/autonomous-hardening`)
 Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the owner's computer off. Based on PR #1 head `feaa738`.
 
@@ -66,5 +81,111 @@ Run in Claude Code **cloud** (session environment `anthropic_cloud`), with the o
 - Tests: 105 unit, 27 Deno, 160 DB; typecheck and build pass.
 - **Awaiting approval:** migrations 3–4, tester row, function deploy, OpenAI key (adult), Google credentials.
 
+## 2026-11-20 — Stripe subscriptions, test mode (branch `claude/stripe-billing`, stacked on `claude/openai-voice`)
+- Inspected the architecture first. `subscriptions`, owner-read RLS, `effective_plan()` (active/trialing within the period) and table-driven limits already existed, so what was added is the sync path, not a new entitlement model.
+- **Migration 5** (local only): Stripe statuses, `mvl_stripe_events` idempotency ledger, `mvl_billing_link_customer`, `mvl_billing_apply_subscription` (service role only). Review: `docs/MIGRATION_5_BILLING_REVIEW.md`. Tested rollback.
+- **Edge Functions:** `billing` (public prices read from Stripe; checkout; portal), `stripe-webhook` (verified, re-fetches, idempotent), `delete-account` (cancels the subscription first). Test-mode lock: live keys refused without `STRIPE_LIVE_MODE_APPROVED=true`.
+- **Frontend:** Pricing page, `/app/billing/success` (waits for the server), Settings plan card (renewal/end date, failed payment, Manage subscription), en/fr.
+- Stripe facts checked on docs.stripe.com: signature scheme, item-level billing periods since basil, invoice→subscription path, current API version, endpoints and parameters.
+- **Tests:** DB billing suite and rollback; 41 new Deno tests (68 in total); Vitest 134+; 11 mocked browser scenarios; mutation checks.
+- **Not done:** no Stripe account was created or accessed; nothing deployed; no migration applied; no secret set.
+
+## 2026-11-20 — Owner-approved changes applied to Supabase `nwglzabnezhmxfyuxhmg`
+The owner explicitly approved all four steps ("Attaque", then selected each one).
+- **Migrations 3, 4 and 5 applied verbatim.** History aligned to `20261119000001`, `20261119000002` and `20261120000001`.
+  - Verified read-only: the 2 OpenAI price rows; the new columns and constraints; none of the elevated functions can be run by visitors or signed-in users; profiles unchanged (spoken languages `[]`); notes 2 and tasks 1 on the owner's account; 2 subscription rows unchanged; ledger empty with RLS on.
+  - Security advisor: only the intended deny-all and admin-RPC notes.
+- **Tester access:** 1 row in `mvl_staff` (role `tester`) for the confirmed owner account. Checked as that user: `is_staff` true, `is_admin` false, `mvl_is_admin()` false. `ai_mode` stays `admins_only`.
+- **Edge Functions deployed, version 1, all ACTIVE:**
+  - `process-voice`: JWT check on;
+  - `billing`: JWT check off by design; checks the user itself;
+  - `stripe-webhook`: JWT check off by design; checks Stripe's signature;
+  - `delete-account`: JWT check on.
+- **No secrets added.** Without them: voice answers `ai_not_configured`, billing reports "not configured", the webhook returns 503.
+- **Not verified:** HTTP calls to the live functions. This session's network proxy blocks the Supabase host.
+- **Still needed:**
+  - `ALLOWED_ORIGINS` (the preview origin) for browser calls to the functions;
+  - an OpenAI key (adult);
+  - Stripe test secrets (adult).
+
 ## Earlier milestones
 See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
+
+## 2026-11-21 — Google sign-in diagnosis + launch preparation
+- **Google sign-in, exact cause:** live auth logs show `400 provider is not enabled`; the Google provider is disabled in Supabase. Code now hides the button while disabled, and handles redirect/cancel cleanly (`src/auth/providers.ts` + tests). Owner steps in `docs/GOOGLE_OAUTH_SETUP.md`. **Not fixed until a real Google login succeeds.**
+- **Legal drafts:** `/privacy` and `/terms` (no invented identity; owner placeholders marked), linked from landing, register, pricing and settings; capture disclosure names OpenAI.
+- **UX:** small tap targets enlarged; 14 pages × 4 widths mock-audited with no overflow and no console errors.
+- **Checks:** typecheck, 151 Vitest, build, deno check, 71 Deno tests, test:db: all green.
+- **Live state (read-only):** 2 users, email identities only, 0 AI usage, 0 Stripe events, `admins_only`, 0 tables without RLS. No production change made.
+- Report: `docs/LAUNCH_READINESS_REPORT.md`.
+
+## 2026-11-21 (later) — first tests against the REAL preview and backend
+- **How:** the session network was limited to the preview and Supabase hosts (new personal environment "My Voice Life", approved). A temporary Vercel share link was used to pass Deployment Protection; the link was not published. Headless Chromium; **Claude in Chrome was not available**.
+- **Live results:**
+  - 9 public pages at 360/390/768/1366 px: no overflow, no console errors.
+  - `/app` redirects to `/login`.
+  - The Google button is hidden (the provider is still off).
+  - A wrong password shows a clear message.
+  - Registration validates email and password in the browser.
+  - Pricing loads the real `billing` function (200) and honestly says Premium is unavailable.
+  - CSP, `X-Frame-Options: DENY`, `nosniff`, `Permissions-Policy: microphone=(self)` and HSTS are present.
+  - CORS allows the preview origin for all functions; `process-voice` without a token returns 401; the webhook with a bad signature returns 503 (not configured).
+- **Fixed (code, not yet deployed):** a disallowed origin was sent back the raw pattern `https://my-voice-life-*-henry7.vercel.app` as `Access-Control-Allow-Origin`. That was harmless (browsers reject it) but wrong. Now the header is omitted (`allowOriginHeader`, + test). It goes live only after an approved redeploy of the functions.
+- **Not tested live:** anything behind sign-in (no test account available; see the report).
+
+## 2026-11-21 ~11:40 UTC — function redeploy (owner-approved), paused after delete-account
+- **Before deploying:** the live code was byte-compared with git (read-only).
+  - `delete-account` v2 and `billing` v2 = commit `d84c1b8`.
+  - `process-voice` v2 = `d84c1b8`, 9 of 10 files identical. `extraction.ts` differs only in encoding (`​` stored as a literal zero-width space); the JavaScript is equivalent.
+- **Deployed: `delete-account` → v3, ACTIVE, verify_jwt=true** (code at `3ecbc81`: the CORS fallback fix).
+  - Verified live: preview origin allowed (200 + exact origin); `https://evil.example` gets no Allow-Origin; a POST without a token returns 401.
+  - Rollback source: `d84c1b8`.
+- **Paused by the owner:** `billing` (v2) and `process-voice` (v2) were NOT deployed. They wait for approval from the responsible adult who manages Supabase.
+- `stripe-webhook` (v1) untouched.
+- No secrets, migrations, data, roles, `ai_mode`, Google, Stripe, Vercel or `main` changes.
+- **Compatibility of the pending `process-voice` (read-only checks):**
+  - the 4 accounting RPCs exist with the exact argument names, service_role only;
+  - price-book rows for the default OpenAI models exist;
+  - no migration needed;
+  - the frontend already handles `ai_not_configured`.
+- Checklist: `docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`.
+
+## 2026-11-21 — testing checklists adapted to desktop
+- Owner tests on a computer, not a phone. `docs/PHONE_TEST_CHECKLIST.md` was replaced by `docs/DESKTOP_TEST_CHECKLIST.md`: 21 steps covering the sidebar layout, narrow window, 200% zoom, data persistence (F5 and reopening), keyboard (Tab/Esc), language, pricing and legal pages, microphone allow/block via the address bar, and sign-out errors.
+- The real voice-test checklist (`docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`) was adapted for desktop browsers: DevTools Offline replaces airplane mode; the address-bar permission replaces phone settings. It now states that mocks do not prove the OpenAI integration: only the real tests 2, 3, 5, 6, 8 and 14 do.
+- Real phones remain untested and are listed as such. Nothing deployed.
+
+## 2026-11-21 — Free/Plus/Pro subscriptions + Bring Your Own AI (built and tested offline; nothing deployed)
+- Owner decisions: pure BYOAI (no AI credits in any plan); key storage built now (OpenAI only); Pro = bigger limits only; Free keeps reminders/events with caps. Objections recorded in `docs/SUBSCRIPTIONS_BYOAI_REPORT.md`.
+- Migration 6 (local + tests only): plans free/plus/pro, configurable caps (triggers), 7-day payment grace, webhook apply v2, BYOAI key storage in Supabase Vault, BYOAI usage and rate limits, `byoai_mode` (default admins_only). Rollback + pre-flight (live, read-only: 0 user rows would change).
+- Functions: billing (checkout per plan, change_plan, invoices), stripe-webhook (plan from the price allow-list), new ai-connections, process-voice BYOAI routing.
+- Frontend: Pricing (3 plans + "AI billed separately" notice), new Billing page, "Your AI provider" card, Capture states, plan-limit messages.
+- Tests: all DB suites, 100 function tests, 167 unit tests, 8 mocked browser scenarios at 4 widths. **No real Stripe test-mode run and no real OpenAI run yet** (no account / key).
+- Docs: `STRIPE_SETUP.md` rewritten, new `BYOAI_SECURITY.md`, legal drafts updated, report `SUBSCRIPTIONS_BYOAI_REPORT.md`.
+
+## 2026-11-21 — Installable app (PWA) + platform plan
+- Owner decisions recorded for next sessions: **Hybrid AI** (included allowances + optional own key) and **monthly + yearly prices**. Not implemented yet.
+- Service worker (public static files only; never Supabase/Stripe/OpenAI, non-GET, Authorization or navigations), offline page + banner, user-confirmed updates, complete manifest (id, maskable icons, screenshots, shortcuts), install card (real prompt / iOS steps / installed), deep links keep their query string through sign-in.
+- `npm run test:pwa`: real Chromium on the production build (Supabase mocked); all checks pass, installability 0 errors. 172 unit tests.
+- Platform plan (`docs/PLATFORMS.md`): PWA everywhere now; Android via TWA (template in `platforms/android-twa/`); iOS App Store only with native value (Capacitor); no desktop wrapper. Biggest gap: reminders don't notify (Web Push not built).
+- Report: `docs/PWA_PLATFORM_REPORT.md`. Nothing deployed or published.
+
+## 2026-11-21 — Hybrid AI allowances + monthly/yearly prices (built and tested; nothing deployed)
+- Migration 6 (still unapplied, edited in place): Pro allowance 600 captures / 1200 min / 10-minute recordings; yearly finance prices; finance summary with monthly + yearly (/12).
+- Stripe config per plan and interval (`STRIPE_PRICE_{PLUS,PRO}_{MONTHLY,YEARLY}`, yearly optional); billing checkout/change_plan take an interval, including monthly↔yearly on the same plan.
+- Frontend: Monthly/Yearly switch, included allowance in plan features, Billing interval switch and included-AI meters; legal drafts updated.
+- Tests: DB suites, 103 function tests, 172 unit tests, mocked browser checks (yearly + hybrid). The included AI still needs `ai_mode = on` (owner approval) and adequate budgets.
+
+## 2026-11-21 — Delivery check: installable app ready to install from the preview
+- Live preview (latest commit) checked in real Chromium against the real Supabase, signed out:
+  - service worker controls the page;
+  - Chromium installability: 0 errors;
+  - wrong password gives a clear message;
+  - protected pages redirect to login;
+  - cache holds only 7 public files (no Supabase data);
+  - offline page works;
+  - 0 console errors;
+  - no horizontal overflow on 6 public pages at 360/390/768/1366 px.
+- Live database (read-only counts): one note, task, reminder and event saved today 12:37–12:40 UTC (the owner's desktop test). 0 voice sessions ever.
+- Automated: 172 unit, 103 function, 11 DB suites (0 failures), build, `test:pwa`. All pass.
+- No APK or desktop installer generated (reasons in `docs/INSTALL_AND_UPDATE.md`). AI provider card shows "not available yet" while its function isn't deployed.

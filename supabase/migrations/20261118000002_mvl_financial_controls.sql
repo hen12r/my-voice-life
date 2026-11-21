@@ -64,8 +64,11 @@ create table if not exists public.mvl_plan_limits (
   captures_per_day integer not null check (captures_per_day > 0),
   updated_at timestamptz not null default now()
 );
+-- Seed rows. Skipped once migration 6 (free/plus/pro) has run, so re-running this file never
+-- re-creates the retired 'premium' plan. No effect on a database that already applied this file.
 insert into public.mvl_plan_limits (plan, ai_captures_per_month, audio_minutes_per_month, max_capture_seconds, captures_per_hour, captures_per_day)
-values ('free', 7, 15, 120, 5, 7), ('premium', 300, 600, 300, 30, 60)
+select * from (values ('free', 7, 15, 120, 5, 7), ('premium', 300, 600, 300, 30, 60)) v
+where not exists (select 1 from public.mvl_plan_limits where plan = 'plus')
 on conflict (plan) do nothing;
 
 create table if not exists public.mvl_plan_prices (
@@ -79,7 +82,8 @@ create table if not exists public.mvl_plan_prices (
   unique (plan, billing_interval, active_from)
 );
 insert into public.mvl_plan_prices (plan, billing_interval, amount_cents, currency, active_from)
-values ('premium', 'month', 499, 'EUR', '2026-01-01'), ('premium', 'year', 3999, 'EUR', '2026-01-01')
+select * from (values ('premium', 'month', 499, 'EUR', '2026-01-01'::date), ('premium', 'year', 3999, 'EUR', '2026-01-01'::date)) v
+where not exists (select 1 from public.mvl_plan_limits where plan = 'plus')
 on conflict do nothing;
 
 create table if not exists public.mvl_fee_schedules (

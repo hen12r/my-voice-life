@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { LogOut, Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
+import { CreditCard, LogOut, Plus, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
 import { createCategory, deleteAccount, deleteCategory, getSubscription, updateProfile } from '../lib/api';
+import { planNameKey } from '../lib/plans';
+import { AiProviderCard } from '../components/AiProviderCard';
+import { InstallCard } from '../pwa/InstallCard';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -14,7 +17,7 @@ import { Alert, Badge, Button, Card, CardHeader, Field, Input, Modal, PageHeader
 
 
 export default function Settings() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { profile, setProfile, session, usage, refreshUsage, signOut } = useAuth();
   const navigate = useNavigate();
   const { categories, setCategories } = useCategories();
@@ -66,7 +69,10 @@ export default function Settings() {
     try { await deleteCategory(id); setCategories(categories.filter((c) => c.id !== id)); } catch (err) { setCatError(errorMessage(t, err)); }
   };
 
-  const premium = sub?.plan === 'premium' && (sub.status === 'active' || sub.status === 'trialing');
+  // The plan shown is the one the SERVER computes (effective_plan), not a client-side guess.
+  const paid = !!usage && usage.plan !== 'free';
+  const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end).toLocaleDateString(locale, { dateStyle: 'long' }) : null;
+  const paymentProblem = sub?.has_billing_account && (sub.status === 'past_due' || sub.status === 'unpaid');
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader title={t('settings.title')} subtitle={session?.user.email} action={usage?.is_admin
@@ -96,7 +102,7 @@ export default function Settings() {
                       <li key={code} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
                         <span dir={l.direction}>{l.nativeName}</span>
                         <Badge tone={l.voice === 'verified' ? 'ok' : 'warn'}>{t(`settings.voice.${l.voice}`)}</Badge>
-                        <button type="button" onClick={() => setSpoken(spoken.filter((c) => c !== code))} className="rounded-full p-0.5 text-muted hover:bg-canvas hover:text-red-600"
+                        <button type="button" onClick={() => setSpoken(spoken.filter((c) => c !== code))} className="-m-1 rounded-full p-1.5 text-muted hover:bg-canvas hover:text-red-600"
                           aria-label={`${t('settings.removeLanguage')} ${l.nativeName}`}><X className="size-3.5" /></button>
                       </li>
                     );
@@ -132,7 +138,7 @@ export default function Settings() {
             {categories.map((c) => (
               <li key={c.id} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
                 <span className="size-2 rounded-full" style={{ background: c.color ?? '#8b6cff' }} aria-hidden />{c.name}
-                <button onClick={() => removeCategory(c.id)} className="rounded-full p-0.5 text-muted hover:bg-canvas hover:text-red-600" aria-label={`${t('common.delete')} ${c.name}`}><X className="size-3.5" /></button>
+                <button onClick={() => removeCategory(c.id)} className="-m-1 rounded-full p-1.5 text-muted hover:bg-canvas hover:text-red-600" aria-label={`${t('common.delete')} ${c.name}`}><X className="size-3.5" /></button>
               </li>
             ))}
           </ul>
@@ -144,18 +150,29 @@ export default function Settings() {
         </div>
       </Card>
 
+      <AiProviderCard />
+
+      <InstallCard />
+
       <Card>
         <CardHeader title={t('settings.plan')} icon={<Sparkles className="size-4 text-accent-600" />} />
         <div className="space-y-3 px-5 pb-5 text-sm">
-          <Badge tone={premium ? 'accent' : 'neutral'}>{premium ? t('settings.planPremium') : t('settings.planFree')}</Badge>
+          <Badge tone={paid ? 'accent' : 'neutral'}>{t(planNameKey(usage?.plan ?? 'free'))}</Badge>
+          {paymentProblem && <Alert>{t('settings.paymentProblem')}</Alert>}
+          {paid && periodEnd && (
+            <p className="text-sm text-ink">{t(sub?.cancel_at_period_end ? 'settings.endsOn' : 'settings.renews').replace('{date}', periodEnd)}</p>
+          )}
           {usage && (
             <>
+              <p className="text-xs font-medium text-muted">{t('settings.staffPlatformAi')}</p>
               <UsageMeter label={t('settings.aiCaptures')} used={usage.captures_used} limit={usage.captures_limit} />
               <UsageMeter label={t('settings.audioMinutes')} used={usage.minutes_used} limit={usage.minutes_limit} />
             </>
           )}
-          <p className="text-xs text-muted">{t('settings.manualUnlimited')}</p>
-          <p className="text-xs text-muted">{t('settings.billingSoon')}</p>
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+            <Link to="/app/billing"><Button variant="secondary" className="w-full" icon={<CreditCard className="size-4" />}>{t('settings.billingLink')}</Button></Link>
+            {!paid && !paymentProblem && <Link to="/pricing"><Button className="w-full" icon={<Sparkles className="size-4" />}>{t('settings.upgrade')}</Button></Link>}
+          </div>
         </div>
       </Card>
 
@@ -163,6 +180,7 @@ export default function Settings() {
         <CardHeader title={t('settings.privacy')} icon={<ShieldCheck className="size-4 text-accent-600" />} />
         <div className="space-y-4 px-5 pb-5 text-sm">
           <p className="text-muted">{t('settings.audioPolicy')}</p>
+          <p className="flex gap-4 text-xs"><Link to="/privacy" className="text-accent-700 hover:underline">{t('legal.privacy')}</Link><Link to="/terms" className="text-accent-700 hover:underline">{t('legal.terms')}</Link></p>
           <Button variant="secondary" className="text-red-700" onClick={() => setDeleting(true)} icon={<Trash2 className="size-4" />}>{t('settings.deleteAccount')}</Button>
         </div>
       </Card>

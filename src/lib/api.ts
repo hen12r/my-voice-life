@@ -1,6 +1,6 @@
 import { functionsUrl, supabase } from './supabase';
 import type { ProposedItem } from '../../supabase/functions/_shared/extraction.ts';
-import type { AdminFinanceSummary, AdminUsageSummary, CalendarEvent, Category, MemoryHit, MyUsage, Note, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
+import type { AdminFinanceSummary, AdminUsageSummary, AiConnection, BillingInfo, BillingInterval, CalendarEvent, Category, Invoice, MemoryHit, MyUsage, Note, PaidPlan, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
 import { zonedTimeToUtc } from './dates';
 
 export class ApiError extends Error {
@@ -24,8 +24,16 @@ export const getProfile = async (): Promise<Profile> =>
 export const updateProfile = async (id: string, patch: Partial<Omit<Profile, 'id'>>) =>
   check(await supabase.from('profiles').update(patch).eq('id', id).select().single());
 
-export const getSubscription = async (): Promise<Subscription | null> =>
-  checkMaybe(await supabase.from('subscriptions').select('plan, status, billing_interval, current_period_end').maybeSingle());
+export const getSubscription = async (): Promise<Subscription | null> => {
+  let res = await supabase.from('subscriptions')
+    .select('plan, status, billing_interval, current_period_end, cancel_at_period_end, stripe_customer_id').maybeSingle();
+  // Before the billing migration is applied the new column doesn't exist yet: fall back.
+  if (res.error?.code === '42703') res = await supabase.from('subscriptions').select('plan, status, billing_interval, current_period_end, stripe_customer_id').maybeSingle();
+  const row = checkMaybe(res) as (Partial<Subscription> & { stripe_customer_id: string | null }) | null;
+  if (!row) return null;
+  const { stripe_customer_id, ...rest } = row;
+  return { ...(rest as Subscription), cancel_at_period_end: rest.cancel_at_period_end ?? false, has_billing_account: Boolean(stripe_customer_id) };
+};
 
 /** The caller's own AI allowance, counted on the server (never in the browser). */
 export const getMyUsage = async (): Promise<MyUsage | null> => checkMaybe(await supabase.rpc('mvl_my_usage')) as MyUsage | null;
@@ -180,6 +188,60 @@ export async function processAudio(blob: Blob, durationMs: number, timezone: str
 export function processText(text: string, timezone: string, languages: string[]) {
   return callFunction<ProcessResult>('process-voice', JSON.stringify({ text, timezone, languages }), true);
 }
+
+// ---------------- Billing (Stripe). The browser only ever receives Stripe-hosted URLs; Premium is
+// granted exclusively by the verified webhook on the server, never by anything the browser reports.
+export async function getBillingInfo(): Promise<BillingInfo> {
+  let res: Response;
+  try {
+    res = await fetch(`${functionsUrl}/billing`, {
+      method: 'POST',
+      headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'prices' }),
+    });
+  } catch {
+    throw new ApiError('network', 'Network error');
+  }
+  const payload = await res.json().catch(() => null);
+  if (!res.ok || !payload) throw new ApiError(payload?.error?.code ?? `http_${res.status}`, payload?.error?.message ?? 'Request failed', res.status);
+  return payload as BillingInfo;
+}
+
+/** Only Stripe's own hosted pages are followed. */
+export function isStripeHostedUrl(url: unknown): url is string {
+  if (typeof url !== 'string') return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && (u.hostname === 'checkout.stripe.com' || u.hostname === 'billing.stripe.com');
+  } catch { return false; }
+}
+
+async function billingRedirect(body: Record<string, unknown>): Promise<string> {
+  const { url } = await callFunction<{ url: unknown }>('billing', JSON.stringify(body), true);
+  if (!isStripeHostedUrl(url)) throw new ApiError('billing_failed', 'Unexpected redirect');
+  return url;
+}
+/** The browser only names a plan; the server picks the Stripe price. */
+export const startCheckout = (plan: PaidPlan, interval: BillingInterval = 'month') => billingRedirect({ action: 'checkout', plan, interval });
+/** Upgrade/downgrade: Stripe's own page confirms the switch (with proration) for an existing subscription. */
+export const changePlan = (plan: PaidPlan, interval: BillingInterval = 'month') => billingRedirect({ action: 'change_plan', plan, interval });
+export const openBillingPortal = () => billingRedirect({ action: 'portal' });
+export async function getInvoices(): Promise<Invoice[]> {
+  const { invoices } = await callFunction<{ invoices: Invoice[] }>('billing', JSON.stringify({ action: 'invoices' }), true);
+  return invoices;
+}
+
+// ---------------- Bring Your Own AI (the user's own OpenAI key). The key is sent once to our
+// Edge Function, which validates it with OpenAI and stores it in Supabase Vault. It is never
+// returned: the app only ever sees a 4-character hint.
+export async function getAiConnections(): Promise<AiConnection[]> {
+  const { connections } = await callFunction<{ connections: AiConnection[] }>('ai-connections', JSON.stringify({ action: 'status' }), true);
+  return connections;
+}
+export const connectOpenAiKey = (apiKey: string) =>
+  callFunction<{ connected: boolean; hint: string }>('ai-connections', JSON.stringify({ action: 'connect', provider: 'openai', api_key: apiKey }), true);
+export const disconnectOpenAiKey = () =>
+  callFunction<{ connected: boolean }>('ai-connections', JSON.stringify({ action: 'disconnect', provider: 'openai' }), true);
 
 export function deleteAccount() {
   return callFunction<{ deleted: boolean }>('delete-account', JSON.stringify({ confirm: 'DELETE' }), true);

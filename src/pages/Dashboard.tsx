@@ -147,7 +147,7 @@ export default function Dashboard() {
   function TaskRow({ task, onToggle, badge }: { task: Task; onToggle: (t: Task) => void; badge?: ReactNode }) {
     return (
       <li className="flex items-center gap-3 px-3 py-2.5 text-sm">
-        <button onClick={() => onToggle(task)} aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')} className="text-muted hover:text-accent-600">
+        <button onClick={() => onToggle(task)} aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')} className="-m-2 rounded-full p-2 text-muted hover:text-accent-600">
           {task.status === 'done' ? <CheckCircle2 className="size-5 text-emerald-600" /> : <Circle className="size-5" />}
         </button>
         <span className={task.status === 'done' ? 'flex-1 text-muted line-through' : 'flex-1'}>{task.title}</span>
