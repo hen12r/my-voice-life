@@ -175,3 +175,17 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 - Stripe config per plan and interval (`STRIPE_PRICE_{PLUS,PRO}_{MONTHLY,YEARLY}`, yearly optional); billing checkout/change_plan take an interval, including monthly↔yearly on the same plan.
 - Frontend: Monthly/Yearly switch, included allowance in plan features, Billing interval switch and included-AI meters; legal drafts updated.
 - Tests: DB suites, 103 function tests, 172 unit tests, mocked browser checks (yearly + hybrid). The included AI still needs `ai_mode = on` (owner approval) and adequate budgets.
+
+## 2026-11-21 — Delivery check: installable app ready to install from the preview
+- Live preview (latest commit) checked in real Chromium against the real Supabase, signed out:
+  - service worker controls the page;
+  - Chromium installability: 0 errors;
+  - wrong password gives a clear message;
+  - protected pages redirect to login;
+  - cache holds only 7 public files (no Supabase data);
+  - offline page works;
+  - 0 console errors;
+  - no horizontal overflow on 6 public pages at 360/390/768/1366 px.
+- Live database (read-only counts): one note, task, reminder and event saved today 12:37–12:40 UTC (the owner's desktop test). 0 voice sessions ever.
+- Automated: 172 unit, 103 function, 11 DB suites (0 failures), build, `test:pwa`. All pass.
+- No APK or desktop installer generated (reasons in `docs/INSTALL_AND_UPDATE.md`). AI provider card shows "not available yet" while its function isn't deployed.
