@@ -56,7 +56,7 @@ export default function Pricing() {
       </header>
 
       <main className="mx-auto -mt-16 max-w-6xl space-y-4 px-4 pb-16 sm:px-5">
-        <div role="note" className="flex gap-3 rounded-2xl border border-accent-200 bg-white p-4 text-sm text-ink shadow-sm">
+        <div role="note" className="flex gap-3 rounded-2xl border border-accent-100 bg-white p-4 text-sm text-ink shadow-sm">
           <Info className="mt-0.5 size-5 shrink-0 text-accent-600" aria-hidden />
           <div>
             <p className="font-semibold">{t('pricing.byoaiTitle')}</p>
