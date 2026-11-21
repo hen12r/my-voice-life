@@ -42,6 +42,7 @@ export interface CalendarEvent {
 /** Plans (server-side source of truth: subscriptions.plan + effective_plan()). */
 export type Plan = 'free' | 'plus' | 'pro';
 export type PaidPlan = 'plus' | 'pro';
+export type BillingInterval = 'month' | 'year';
 
 export interface Subscription {
   plan: Plan; status: string; billing_interval: string | null; current_period_end: string | null;
@@ -49,6 +50,10 @@ export interface Subscription {
 }
 /** Per-plan limits shown on Pricing (from mvl_plan_limits; null = no cap). */
 export interface PlanCaps {
+  // Included AI allowance, paid by My Voice Life (hybrid model)
+  ai_captures_per_month: number;
+  audio_minutes_per_month: number;
+  max_capture_seconds: number;
   max_active_reminders: number | null;
   max_upcoming_events: number | null;
   max_ai_connections: number;
@@ -60,7 +65,7 @@ export interface PlanCaps {
 export interface BillingInfo {
   configured: boolean;
   test_mode: boolean;
-  prices: { plan: PaidPlan; interval: 'month'; amount: number; currency: string }[];
+  prices: { plan: PaidPlan; interval: BillingInterval; amount: number; currency: string }[];
   limits: Partial<Record<Plan, PlanCaps>>;
 }
 export interface Invoice {
@@ -150,7 +155,7 @@ export interface AdminFinanceSummary {
   currency: 'EUR';
   payments_active: boolean;
   labels: Record<'revenue' | 'net_revenue' | 'stripe_fees' | 'ai_costs' | 'operating_expenses' | 'contribution', string>;
-  users: { total: number; monthly_active: number; paid: number; plus: number; pro: number; free: number };
+  users: { total: number; monthly_active: number; paid: number; plus: number; pro: number; free: number; plus_monthly?: number; plus_yearly?: number; pro_monthly?: number; pro_yearly?: number };
   revenue_gross_eur: number;
   revenue_net_eur: number;
   stripe_fees_eur: number;

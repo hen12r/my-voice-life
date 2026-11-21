@@ -40,23 +40,25 @@ describe('voiceAccess (mirrors the server; display only)', () => {
 });
 
 describe('planFeatures (only real features, from the server limits)', () => {
-  const free: PlanCaps = { max_active_reminders: 10, max_upcoming_events: 20, max_ai_connections: 1, byoai_captures_per_hour: 5, byoai_captures_per_day: 10, byoai_max_capture_seconds: 120 };
-  const pro: PlanCaps = { ...free, max_active_reminders: null, max_upcoming_events: null, byoai_captures_per_day: 200, byoai_max_capture_seconds: 600 };
-  it('shows caps from the limits table and says no AI credits are included', () => {
+  const free: PlanCaps = { ai_captures_per_month: 7, audio_minutes_per_month: 15, max_capture_seconds: 120, max_active_reminders: 10, max_upcoming_events: 20, max_ai_connections: 1, byoai_captures_per_hour: 5, byoai_captures_per_day: 10, byoai_max_capture_seconds: 120 };
+  const pro: PlanCaps = { ...free, ai_captures_per_month: 600, audio_minutes_per_month: 1200, max_capture_seconds: 600, max_active_reminders: null, max_upcoming_events: null, byoai_captures_per_day: 200, byoai_max_capture_seconds: 600 };
+  it('shows caps and the included AI allowance from the limits table (hybrid model)', () => {
     const f = planFeatures(t, free, 'en');
     expect(f).toContain('Up to 10 active reminders');
     expect(f).toContain('Up to 20 upcoming calendar events');
     expect(f.some((x) => x.includes('up to 10 captures a day') && x.includes('2 min'))).toBe(true);
-    expect(f.some((x) => /No AI credits included/.test(x))).toBe(true);
+    expect(f).toContain('7 AI voice captures and 15 min of audio a month included');
+    expect(f.some((x) => x.startsWith('Optional: your own OpenAI key'))).toBe(true);
   });
   it('null caps read as unlimited', () => {
     const f = planFeatures(t, pro, 'en');
     expect(f).toContain('Unlimited reminders');
     expect(f.some((x) => x.includes('200 captures a day') && x.includes('10 min'))).toBe(true);
+    expect(f).toContain('600 AI voice captures and 1,200 min of audio a month included');
   });
   it('never claims features that do not exist', () => {
     const all = [...planFeatures(t, free, 'en'), ...planFeatures(t, pro, 'en')].join(' ').toLowerCase();
-    for (const fake of ['priority support', 'workflow', 'multiple providers', 'advanced organisation', 'included credits']) expect(all).not.toContain(fake);
+    for (const fake of ['priority support', 'workflow', 'multiple providers', 'advanced organisation', 'integrations']) expect(all).not.toContain(fake);
   });
 });
 

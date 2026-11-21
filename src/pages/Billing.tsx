@@ -6,7 +6,7 @@ import { errorMessage, useI18n } from '../lib/i18n';
 import { changePlan, getBillingInfo, getInvoices, getSubscription, openBillingPortal } from '../lib/api';
 import { formatStripeAmount } from '../lib/money';
 import { planFeatures, planNameKey } from '../lib/plans';
-import type { BillingInfo, Invoice, PaidPlan, Subscription } from '../lib/types';
+import type { BillingInfo, BillingInterval, Invoice, PaidPlan, Subscription } from '../lib/types';
 import { hasLiveSubscription } from './Pricing';
 import { Alert, Badge, Button, Card, CardHeader, PageHeader, Spinner } from '../components/ui';
 
@@ -37,7 +37,11 @@ export default function Billing() {
   const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(locale, { dateStyle: 'long' }) : null);
   const periodEnd = date(sub?.current_period_end);
   const other: PaidPlan | null = plan === 'plus' ? 'pro' : plan === 'pro' ? 'plus' : null;
-  const otherPrice = other ? info?.prices.find((p) => p.plan === other) : undefined;
+  const curInterval: BillingInterval = sub?.billing_interval === 'year' ? 'year' : 'month';
+  const otherInterval: BillingInterval = curInterval === 'year' ? 'month' : 'year';
+  // Another plan at the same billing period, and the same plan at the other period (if Stripe has that price).
+  const otherPrice = other ? info?.prices.find((p) => p.plan === other && p.interval === curInterval) : undefined;
+  const switchPrice = plan !== 'free' ? info?.prices.find((p) => p.plan === plan && p.interval === otherInterval) : undefined;
 
   const go = async (key: string, fn: () => Promise<string>) => {
     setBusy(key); setError(null);
@@ -73,9 +77,15 @@ export default function Billing() {
           <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
             {plan === 'free' && <Link to="/pricing"><Button className="w-full" icon={<Sparkles className="size-4" />}>{t('billing.seePlans')}</Button></Link>}
             {live && other && otherPrice && (
-              <Button variant={other === 'pro' ? 'primary' : 'secondary'} loading={busy === 'change'} disabled={busy !== null} onClick={() => go('change', () => changePlan(other))}>
+              <Button variant={other === 'pro' ? 'primary' : 'secondary'} loading={busy === 'change'} disabled={busy !== null} onClick={() => go('change', () => changePlan(other, curInterval))}>
                 {t(other === 'pro' ? 'pricing.upgradeTo' : 'pricing.downgradeTo').replace('{plan}', t(planNameKey(other)))}
-                {' · '}{formatStripeAmount(otherPrice.amount, otherPrice.currency, locale)}{t('pricing.perMonth')}
+                {' · '}{formatStripeAmount(otherPrice.amount, otherPrice.currency, locale)}{t(curInterval === 'year' ? 'pricing.perYear' : 'pricing.perMonth')}
+              </Button>
+            )}
+            {live && plan !== 'free' && switchPrice && (
+              <Button variant="secondary" loading={busy === 'interval'} disabled={busy !== null} onClick={() => go('interval', () => changePlan(plan, otherInterval))}>
+                {t(otherInterval === 'year' ? 'pricing.switchToYearly' : 'pricing.switchToMonthly')}
+                {' · '}{formatStripeAmount(switchPrice.amount, switchPrice.currency, locale)}{t(otherInterval === 'year' ? 'pricing.perYear' : 'pricing.perMonth')}
               </Button>
             )}
             {sub?.has_billing_account && (
@@ -91,9 +101,11 @@ export default function Billing() {
       <Card>
         <CardHeader title={t('billing.usageTitle')} />
         <div className="space-y-3 px-5 pb-5 text-sm">
+          <CapLine label={t('billing.usageAiCaptures')} used={usage.captures_used} cap={usage.captures_limit} />
+          <CapLine label={t('billing.usageAiMinutes')} used={usage.minutes_used} cap={usage.minutes_limit} />
           <CapLine label={t('billing.usageReminders')} used={usage.active_reminders} cap={usage.max_active_reminders} />
           <CapLine label={t('billing.usageEvents')} used={usage.upcoming_events} cap={usage.max_upcoming_events} />
-          <CapLine label={t('billing.usageVoiceToday')} used={usage.byoai_used_today} cap={usage.byoai_captures_per_day} />
+          {usage.byoai_connected && <CapLine label={t('billing.usageVoiceToday')} used={usage.byoai_used_today} cap={usage.byoai_captures_per_day} />}
           <p className="text-xs text-muted">
             {t('billing.aiBilledSeparately')}{' '}
             <a href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent-700 hover:underline">

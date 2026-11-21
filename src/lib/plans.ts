@@ -1,3 +1,4 @@
+// Hybrid AI model: each plan includes an AI allowance; users may also bring their own OpenAI key.
 // Plan names, feature lists and voice access, shared by Pricing, Billing, Settings and Capture so
 // they can never disagree. Every feature line is generated from the server's limits (mvl_plan_limits)
 // and describes something that exists today. Nothing here decides access: the server does.
@@ -19,9 +20,9 @@ export function planFeatures(t: (k: TranslationKey) => string, caps: PlanCaps | 
   }
   out.push(t('plan.f.memory'));
   if (caps) {
+    out.push(t('plan.f.included').replace('{n}', n(caps.ai_captures_per_month)).replace('{m}', n(caps.audio_minutes_per_month)));
     out.push(t('plan.f.voice').replace('{n}', n(caps.byoai_captures_per_day)).replace('{m}', n(Math.round(caps.byoai_max_capture_seconds / 60 * 10) / 10)));
   }
-  out.push(t('plan.f.noCredits'));
   return out;
 }
 

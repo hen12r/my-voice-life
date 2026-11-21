@@ -1,6 +1,6 @@
 import { functionsUrl, supabase } from './supabase';
 import type { ProposedItem } from '../../supabase/functions/_shared/extraction.ts';
-import type { AdminFinanceSummary, AdminUsageSummary, AiConnection, BillingInfo, CalendarEvent, Category, Invoice, MemoryHit, MyUsage, Note, PaidPlan, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
+import type { AdminFinanceSummary, AdminUsageSummary, AiConnection, BillingInfo, BillingInterval, CalendarEvent, Category, Invoice, MemoryHit, MyUsage, Note, PaidPlan, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
 import { zonedTimeToUtc } from './dates';
 
 export class ApiError extends Error {
@@ -222,9 +222,9 @@ async function billingRedirect(body: Record<string, unknown>): Promise<string> {
   return url;
 }
 /** The browser only names a plan; the server picks the Stripe price. */
-export const startCheckout = (plan: PaidPlan) => billingRedirect({ action: 'checkout', plan });
+export const startCheckout = (plan: PaidPlan, interval: BillingInterval = 'month') => billingRedirect({ action: 'checkout', plan, interval });
 /** Upgrade/downgrade: Stripe's own page confirms the switch (with proration) for an existing subscription. */
-export const changePlan = (plan: PaidPlan) => billingRedirect({ action: 'change_plan', plan });
+export const changePlan = (plan: PaidPlan, interval: BillingInterval = 'month') => billingRedirect({ action: 'change_plan', plan, interval });
 export const openBillingPortal = () => billingRedirect({ action: 'portal' });
 export async function getInvoices(): Promise<Invoice[]> {
   const { invoices } = await callFunction<{ invoices: Invoice[] }>('billing', JSON.stringify({ action: 'invoices' }), true);

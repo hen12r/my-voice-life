@@ -6,7 +6,7 @@ import { errorMessage, useI18n } from '../lib/i18n';
 import { changePlan, getBillingInfo, getSubscription, startCheckout } from '../lib/api';
 import { formatStripeAmount } from '../lib/money';
 import { PLANS, planFeatures, planNameKey } from '../lib/plans';
-import type { BillingInfo, PaidPlan, Plan, Subscription } from '../lib/types';
+import type { BillingInfo, BillingInterval, PaidPlan, Plan, Subscription } from '../lib/types';
 import { Logo } from '../components/AppShell';
 import { Alert, Button, Card, cx, Spinner } from '../components/ui';
 
@@ -23,6 +23,7 @@ export default function Pricing() {
   const [info, setInfo] = useState<BillingInfo | null>(null);
   const [sub, setSub] = useState<Subscription | null>(null);
   const [busy, setBusy] = useState<PaidPlan | null>(null);
+  const [interval, setInterval] = useState<BillingInterval>('month');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,10 +31,14 @@ export default function Pricing() {
       .catch((e) => { setError(errorMessage(t, e)); setInfo({ configured: false, test_mode: false, prices: [], limits: {} }); });
   }, []);
   useEffect(() => { if (session) getSubscription().then(setSub).catch(() => undefined); }, [session]);
+  // A yearly subscriber sees yearly prices first.
+  useEffect(() => { if (sub?.billing_interval === 'year') setInterval('year'); }, [sub?.billing_interval]);
 
   // The plan shown as "current" is the SERVER's (effective_plan), never a browser guess.
   const current: Plan | null = session ? (usage?.plan ?? 'free') : null;
   const live = hasLiveSubscription(sub);
+  const hasYearly = !!info?.prices.some((p) => p.interval === 'year');
+  const currentInterval: BillingInterval | null = sub?.billing_interval === 'year' ? 'year' : sub?.billing_interval === 'month' ? 'month' : null;
 
   const go = async (plan: PaidPlan, fn: () => Promise<string>) => {
     setBusy(plan); setError(null);
@@ -68,10 +73,23 @@ export default function Pricing() {
         {info && !info.configured && <Alert kind="info">{t('pricing.notAvailable')}</Alert>}
         {error && <Alert>{error}</Alert>}
 
+        {hasYearly && (
+          <div className="flex justify-center">
+            <div role="radiogroup" aria-label={t('pricing.title')} className="inline-flex rounded-xl bg-white p-1 text-sm shadow-sm ring-1 ring-line">
+              {(['month', 'year'] as const).map((i) => (
+                <button key={i} type="button" role="radio" aria-checked={interval === i} onClick={() => setInterval(i)}
+                  className={cx('rounded-lg px-4 py-1.5 font-medium transition-colors', interval === i ? 'bg-navy-900 text-white' : 'text-muted hover:text-ink')}>
+                  {t(i === 'month' ? 'pricing.monthly' : 'pricing.yearly')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!info ? <Card className="p-10"><Spinner label={t('pricing.loading')} /></Card> : (
           <div className="grid gap-4 lg:grid-cols-3">
             {PLANS.map((plan) => {
-              const price = plan === 'free' ? null : info.prices.find((p) => p.plan === plan) ?? null;
+              const price = plan === 'free' ? null : info.prices.find((p) => p.plan === plan && p.interval === interval) ?? null;
               const isCurrent = current === plan;
               return (
                 <Card key={plan} className={cx('flex flex-col p-6', plan === 'plus' && 'ring-2 ring-accent-500')}>
@@ -85,7 +103,8 @@ export default function Pricing() {
                     {plan === 'free'
                       ? formatStripeAmount(0, info.prices[0]?.currency ?? 'USD', locale)
                       : price
-                        ? <>{formatStripeAmount(price.amount, price.currency, locale)}<span className="ml-1 text-sm font-normal text-muted">{t('pricing.perMonth')}</span></>
+                        ? <>{formatStripeAmount(price.amount, price.currency, locale)}<span className="ml-1 text-sm font-normal text-muted">{t(price.interval === 'year' ? 'pricing.perYear' : 'pricing.perMonth')}</span>
+                            {price.interval === 'year' && <span className="mt-1 block text-sm font-normal text-muted">{t('pricing.perMonthEquiv').replace('{price}', formatStripeAmount(Math.round(price.amount / 12), price.currency, locale))}</span>}</>
                         : <span className="text-base font-normal text-muted">{t('pricing.planNotAvailable')}</span>}
                   </p>
                   <ul className="mt-5 flex-1 space-y-2.5 text-sm text-ink">
@@ -95,8 +114,8 @@ export default function Pricing() {
                   </ul>
                   <div className="mt-6 space-y-2">
                     <PlanAction plan={plan} signedIn={!!session} current={current} live={live} hasPrice={!!price}
-                      busy={busy === plan} disabled={busy !== null}
-                      onCheckout={(p) => go(p, () => startCheckout(p))} onChange={(p) => go(p, () => changePlan(p))} />
+                      interval={interval} currentInterval={currentInterval} busy={busy === plan} disabled={busy !== null}
+                      onCheckout={(p) => go(p, () => startCheckout(p, interval))} onChange={(p) => go(p, () => changePlan(p, interval))} />
                   </div>
                 </Card>
               );
@@ -112,6 +131,7 @@ export default function Pricing() {
 
 function PlanAction(p: {
   plan: Plan; signedIn: boolean; current: Plan | null; live: boolean; hasPrice: boolean; busy: boolean; disabled: boolean;
+  interval: BillingInterval; currentInterval: BillingInterval | null;
   onCheckout: (plan: PaidPlan) => void; onChange: (plan: PaidPlan) => void;
 }) {
   const { t } = useI18n();
@@ -120,7 +140,13 @@ function PlanAction(p: {
     return p.hasPrice ? <Link to="/login" state={{ from: '/pricing' }} className="block"><Button className="w-full">{t('pricing.signinToSubscribe')}</Button></Link> : null;
   }
   if (p.current === p.plan) {
-    return p.plan === 'free' ? null : <Link to="/app/billing" className="block"><Button variant="secondary" className="w-full">{t('pricing.manage')}</Button></Link>;
+    if (p.plan === 'free') return null;
+    const samePlan = p.plan;
+    // Same plan, other billing period (e.g. monthly → yearly): Stripe's confirm page, with proration.
+    if (p.live && p.hasPrice && p.currentInterval && p.currentInterval !== p.interval) {
+      return <Button className="w-full" loading={p.busy} disabled={p.disabled} onClick={() => p.onChange(samePlan)}>{t(p.interval === 'year' ? 'pricing.switchToYearly' : 'pricing.switchToMonthly')}</Button>;
+    }
+    return <Link to="/app/billing" className="block"><Button variant="secondary" className="w-full">{t('pricing.manage')}</Button></Link>;
   }
   if (p.plan === 'free') {
     // Going back to Free = cancelling, which only Stripe's portal does (from the Billing page).

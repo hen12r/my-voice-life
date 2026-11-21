@@ -58,7 +58,7 @@ export function PrivacyPolicy() {
       <ul>
         <li>Recording starts only when you press the microphone, and the browser asks your permission first.</li>
         <li><b>We do not store your audio.</b> It is processed in memory by our server function and discarded.</li>
-        <li>To transcribe and organise it, the audio and then the transcript text are sent to <b>OpenAI</b>, using <b>your own OpenAI API key</b> (see "Your AI key" below), so OpenAI processes them under your OpenAI account and its terms. We send requests with storage turned off where OpenAI offers that option; OpenAI's own data policies apply to the processing it performs.</li>
+        <li>To transcribe and organise it, the audio and then the transcript text are sent to <b>OpenAI</b>: either through My Voice Life's own OpenAI account (within your plan's included allowance), or, if you connected one, through <b>your own OpenAI API key</b> (see "Your AI key" below), in which case OpenAI processes them under your OpenAI account and its terms. We send requests with storage turned off where OpenAI offers that option; OpenAI's own data policies apply to the processing it performs.</li>
         <li>The text transcript is saved with your records, because it is your searchable memory. You can delete it.</li>
         <li>Nothing the AI suggests is saved until you review and accept it.</li>
       </ul>
@@ -67,7 +67,7 @@ export function PrivacyPolicy() {
       <ul>
         <li><b>Supabase</b> — database, sign-in and server functions.</li>
         <li><b>Vercel</b> — hosting of the web app.</li>
-        <li><b>OpenAI</b>: speech-to-text and organising your words, only when you use voice or "Organise", through your own OpenAI account.</li>
+        <li><b>OpenAI</b>: speech-to-text and organising your words, only when you use voice or "Organise" (through our account, or yours if you connected a key).</li>
         <li><b>Stripe</b> — payments, only if you subscribe.</li>
         <li><b>Google</b> — only if you choose "Continue with Google".</li>
       </ul>
@@ -76,7 +76,7 @@ export function PrivacyPolicy() {
       <h2>Your AI key</h2>
       <ul>
         <li>If you connect an OpenAI API key, we check it with OpenAI and store it <b>encrypted</b> (Supabase Vault). It is used only by our server to process your own recordings, and it is never shown again in the app (only its last 4 characters).</li>
-        <li>OpenAI bills your OpenAI account for that usage. My Voice Life plans include no AI credits.</li>
+        <li>When your own key is used, OpenAI bills your OpenAI account for that usage. Usage within your plan's included allowance is paid by My Voice Life.</li>
         <li>Disconnecting the key, or deleting your account, deletes it.</li>
       </ul>
 
@@ -121,8 +121,8 @@ export function TermsOfService() {
       <h2>Plans and payment</h2>
       <ul>
         <li>Plans: Free, Plus and Pro. Their limits (for example the number of active reminders, upcoming events, and voice captures per day) are shown on the Pricing page. Notes and tasks you type are unlimited on every plan.</li>
-        <li><b>AI usage is not included in any plan.</b> Voice works with your own OpenAI API key, and OpenAI bills you directly for that usage under its own terms.</li>
-        <li>Plus and Pro are monthly subscriptions at the price shown on the Pricing page when you subscribe, renewing automatically until you cancel. You can switch between them; Stripe calculates any proration.</li>
+        <li>Each plan includes a monthly AI allowance (voice captures and minutes of audio), shown on the Pricing page. You may also connect your own OpenAI API key; OpenAI then bills you directly for that usage under its own terms.</li>
+        <li>Plus and Pro are subscriptions, billed monthly or yearly at the price shown on the Pricing page when you subscribe, renewing automatically until you cancel. You can switch plan or billing period; Stripe calculates any proration.</li>
         <li>You can cancel at any time from the Billing page; your plan then stays active until the end of the paid period. If a payment fails, the plan is kept for a short grace period while the payment is retried.</li>
         <li>Refunds and withdrawal rights: <Todo>to be completed by the owner in line with the law of the countries where plans are sold</Todo>.</li>
         <li>Taxes: <Todo>VAT/tax handling to be decided before live payments</Todo>.</li>

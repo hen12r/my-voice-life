@@ -162,7 +162,7 @@ export default function Settings() {
           {paid && periodEnd && (
             <p className="text-sm text-ink">{t(sub?.cancel_at_period_end ? 'settings.endsOn' : 'settings.renews').replace('{date}', periodEnd)}</p>
           )}
-          {usage?.is_staff && (
+          {usage && (
             <>
               <p className="text-xs font-medium text-muted">{t('settings.staffPlatformAi')}</p>
               <UsageMeter label={t('settings.aiCaptures')} used={usage.captures_used} limit={usage.captures_limit} />
