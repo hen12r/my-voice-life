@@ -132,3 +132,20 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
   - CORS allows the preview origin for all functions; `process-voice` without a token returns 401; the webhook with a bad signature returns 503 (not configured).
 - **Fixed (code, not yet deployed):** a disallowed origin was sent back the raw pattern `https://my-voice-life-*-henry7.vercel.app` as `Access-Control-Allow-Origin`. That was harmless (browsers reject it) but wrong. Now the header is omitted (`allowOriginHeader`, + test). It goes live only after an approved redeploy of the functions.
 - **Not tested live:** anything behind sign-in (no test account available; see the report).
+
+## 2026-11-21 ~11:40 UTC — function redeploy (owner-approved), paused after delete-account
+- **Before deploying:** the live code was byte-compared with git (read-only).
+  - `delete-account` v2 and `billing` v2 = commit `d84c1b8`.
+  - `process-voice` v2 = `d84c1b8`, 9 of 10 files identical. `extraction.ts` differs only in encoding (`​` stored as a literal zero-width space); the JavaScript is equivalent.
+- **Deployed: `delete-account` → v3, ACTIVE, verify_jwt=true** (code at `3ecbc81`: the CORS fallback fix).
+  - Verified live: preview origin allowed (200 + exact origin); `https://evil.example` gets no Allow-Origin; a POST without a token returns 401.
+  - Rollback source: `d84c1b8`.
+- **Paused by the owner:** `billing` (v2) and `process-voice` (v2) were NOT deployed. They wait for approval from the responsible adult who manages Supabase.
+- `stripe-webhook` (v1) untouched.
+- No secrets, migrations, data, roles, `ai_mode`, Google, Stripe, Vercel or `main` changes.
+- **Compatibility of the pending `process-voice` (read-only checks):**
+  - the 4 accounting RPCs exist with the exact argument names, service_role only;
+  - price-book rows for the default OpenAI models exist;
+  - no migration needed;
+  - the frontend already handles `ai_not_configured`.
+- Checklist: `docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`.
