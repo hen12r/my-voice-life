@@ -8,8 +8,10 @@
 - Chromium runs against a mocked backend at 360 / 390 / 768 / 1366 px.
 
 **Limits of this report (read first):**
-- Claude in Chrome was **not connected** to this session, and the session's network proxy blocks both the Vercel preview and the Supabase host.
-- So **no test was run in a real browser against the live app**, and no real Google, OpenAI or Stripe call was made.
+- Claude in Chrome was **not connected** to this session. A headless Chromium was used instead.
+- **Live** (real preview + real Supabase) tests cover everything **outside sign-in**: public pages, auth errors, Google state, Pricing → `billing`, headers, CORS, function auth. Network access was granted later on 21 Nov.
+- **Nothing behind sign-in has been tested live:** no test account was available. Those flows are mock-tested only.
+- No real Google, OpenAI or Stripe call was made.
 - Everything marked "tested" below was tested with mocks unless it says *live*.
 
 ## Verdict
@@ -92,7 +94,7 @@ Priority: **CRITICAL** blocks any public launch · **HIGH** blocks a paid/public
 | `deno check` all functions | ✅ pass |
 | `npm run test:functions` | ✅ 71 passed, 0 failed |
 | `npm run test:db` (RLS, financial, multilingual, billing, upgrade, guard) | ✅ 0 failures |
-| GitHub CI on PR #4 | see the PR after push |
+| GitHub CI on PR #4 | runs on every push; see the PR |
 
 ### H. Deployment
 | Item | Status | Priority |
@@ -103,7 +105,21 @@ Priority: **CRITICAL** blocks any public launch · **HIGH** blocks a paid/public
 | Custom SMTP for auth emails | ⬜ Supabase default mailer (rate-limited) | HIGH for public sign-ups |
 
 ### I. Real-user testing
-Not performed: Claude in Chrome was unavailable, and the network blocks the preview. **The owner should do a 15-minute pass on a phone** before inviting anyone:
+**Live, outside sign-in (headless Chromium, 21 Nov):**
+- 9 public pages × 4 widths: no overflow, no console errors.
+- `/app` redirects to login.
+- Google button hidden.
+- Wrong-password message is clear.
+- Registration validation works.
+- Pricing loads the real `billing` function.
+- Security headers present.
+- CORS correct for the preview.
+- `process-voice` refuses unauthenticated calls (401).
+- The webhook refuses calls (503, not configured).
+
+**Found live and fixed in code (needs an approved redeploy):** the CORS fallback echoed a pattern string to disallowed origins.
+
+**Not performed:** signed-in flows (notes/tasks/reminders/events CRUD, persistence, settings, deletion, voice, checkout). There is no test account; Claude did not create one in production without your decision. **The owner should do a 15-minute pass on a phone** before inviting anyone:
 - sign up;
 - create one of each item;
 - search;
