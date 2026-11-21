@@ -8,7 +8,7 @@
 // Responses: 2xx = done (or deliberately ignored), 400 = rejected (bad signature / wrong mode),
 // 5xx = temporary failure, so Stripe retries.
 import {
-  checkoutUserFromEvent, HANDLED_EVENTS, isConfiguredPrice, parseEvent, type PriceConfig, type StripeClient, StripeApiError,
+  checkoutUserFromEvent, HANDLED_EVENTS, type PaidPlan, parseEvent, planForPrice, type PriceConfig, type StripeClient, StripeApiError,
   subscriptionIdFromEvent, subscriptionSnapshot, verifyStripeSignature,
 } from '../_shared/stripe.ts';
 
@@ -16,6 +16,8 @@ export interface ApplyArgs {
   p_event_id: string; p_event_type: string; p_event_created: string; p_livemode: boolean;
   p_customer: string; p_subscription: string; p_status: string; p_price_id: string | null; p_interval: string | null;
   p_period_end: string | null; p_cancel_at_period_end: boolean; p_metadata_user: string | null;
+  /** Plan derived from the server's price allow-list (null only when access is being removed). */
+  p_plan: PaidPlan | null;
 }
 export interface WebhookStore { applySubscription(args: ApplyArgs): Promise<{ outcome: string }> }
 
@@ -71,8 +73,10 @@ export function createWebhookHandler(deps: WebhookDeps) {
       }
       if (snapshot.livemode !== event.livemode) return reply(400, { error: 'mode_mismatch' });
 
-      // Never GRANT access for a price we didn't configure; removing access is always applied.
-      if (GRANTING.includes(snapshot.status) && !isConfiguredPrice(deps.prices, snapshot.priceId)) {
+      // The plan comes ONLY from our price allow-list. Never GRANT access for a price we didn't
+      // configure; removing access (canceled / incomplete_expired) is always applied.
+      const plan = planForPrice(deps.prices, snapshot.priceId);
+      if (GRANTING.includes(snapshot.status) && !plan) {
         console.warn(`stripe-webhook: ${event.id} ignored (unconfigured price)`);
         return reply(200, { received: true, ignored: 'unknown_price' });
       }
@@ -90,6 +94,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
         p_period_end: snapshot.periodEnd,
         p_cancel_at_period_end: snapshot.cancelAtPeriodEnd,
         p_metadata_user: checkoutUserFromEvent(event) ?? snapshot.metadataUser,
+        p_plan: plan,
       });
       console.log(`stripe-webhook: ${event.id} ${event.type} → ${result.outcome}`);
       return reply(200, { received: true, outcome: result.outcome });

@@ -14,7 +14,7 @@ Deno.serve(createWebhookHandler({
   prices: env.prices,
   store: {
     async applySubscription(args) {
-      const { data, error } = await admin.rpc('mvl_billing_apply_subscription', args);
+      const { data, error } = await admin.rpc('mvl_billing_apply_subscription_v2', args);
       if (error) throw new Error(`apply failed: ${error.code ?? ''}`);
       return data as { outcome: string };
     },

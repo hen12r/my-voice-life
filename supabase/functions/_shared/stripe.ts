@@ -190,15 +190,34 @@ export function subscriptionSnapshot(sub: Record<string, unknown>): Subscription
 
 // ---------------------------------------------------------------- configuration
 
-export interface PriceConfig { month: string | null; year: string | null }
+/** Paid plans sold through Stripe. Free has no price. */
+export type PaidPlan = 'plus' | 'pro';
+export const PAID_PLANS: readonly PaidPlan[] = ['plus', 'pro'];
 
-export function parsePriceConfig(month: string | undefined, year: string | undefined): PriceConfig {
+/** One monthly recurring Stripe price per paid plan (env STRIPE_PRICE_PLUS_MONTHLY / STRIPE_PRICE_PRO_MONTHLY). */
+export interface PriceConfig { plus: string | null; pro: string | null }
+
+export function parsePriceConfig(plus: string | undefined, pro: string | undefined): PriceConfig {
   const ok = (v: string | undefined) => (v && /^price_[A-Za-z0-9]+$/.test(v.trim()) ? v.trim() : null);
-  return { month: ok(month), year: ok(year) };
+  const cfg = { plus: ok(plus), pro: ok(pro) };
+  // The same price for two plans would make the plan ambiguous: refuse both.
+  return cfg.plus && cfg.plus === cfg.pro ? { plus: null, pro: null } : cfg;
+}
+
+/** The plan a Stripe price grants, decided ONLY from the server's allow-list. Unknown → null (grants nothing). */
+export function planForPrice(cfg: PriceConfig, priceId: string | null): PaidPlan | null {
+  if (!priceId) return null;
+  if (priceId === cfg.plus) return 'plus';
+  if (priceId === cfg.pro) return 'pro';
+  return null;
 }
 
 export function isConfiguredPrice(cfg: PriceConfig, priceId: string | null): boolean {
-  return priceId !== null && (priceId === cfg.month || priceId === cfg.year);
+  return planForPrice(cfg, priceId) !== null;
+}
+
+export function isPaidPlan(v: unknown): v is PaidPlan {
+  return v === 'plus' || v === 'pro';
 }
 
 // ---------------------------------------------------------------- REST client

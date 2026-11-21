@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  billingModeAllowed, checkoutUserFromEvent, createStripeClient, formEncode, isConfiguredPrice, parseEvent, parsePriceConfig,
+  billingModeAllowed, checkoutUserFromEvent, createStripeClient, formEncode, isConfiguredPrice, isPaidPlan, parseEvent, parsePriceConfig, planForPrice,
   secretKeyMode, signStripePayloadForTest, StripeApiError, subscriptionIdFromEvent, subscriptionSnapshot, verifyStripeSignature,
 } from './stripe';
 
@@ -137,14 +137,30 @@ describe('subscription snapshots', () => {
 
 describe('configuration', () => {
   it('accepts only well-formed price ids', () => {
-    expect(parsePriceConfig(' price_Month1 ', 'price_Year1')).toEqual({ month: 'price_Month1', year: 'price_Year1' });
-    expect(parsePriceConfig('prod_X', undefined)).toEqual({ month: null, year: null });
+    expect(parsePriceConfig(' price_Plus1 ', 'price_Pro1')).toEqual({ plus: 'price_Plus1', pro: 'price_Pro1' });
+    expect(parsePriceConfig('prod_X', undefined)).toEqual({ plus: null, pro: null });
+  });
+  it('refuses the same price for both plans (the plan would be ambiguous)', () => {
+    expect(parsePriceConfig('price_Same', 'price_Same')).toEqual({ plus: null, pro: null });
   });
   it('allow-lists configured prices only', () => {
-    const cfg = { month: 'price_M', year: null };
-    expect(isConfiguredPrice(cfg, 'price_M')).toBe(true);
+    const cfg = { plus: 'price_P', pro: null };
+    expect(isConfiguredPrice(cfg, 'price_P')).toBe(true);
     expect(isConfiguredPrice(cfg, 'price_Other')).toBe(false);
     expect(isConfiguredPrice(cfg, null)).toBe(false);
+  });
+  it('maps a price to its plan from the server allow-list only', () => {
+    const cfg = { plus: 'price_P', pro: 'price_Q' };
+    expect(planForPrice(cfg, 'price_P')).toBe('plus');
+    expect(planForPrice(cfg, 'price_Q')).toBe('pro');
+    expect(planForPrice(cfg, 'price_Unknown')).toBeNull();
+    expect(planForPrice(cfg, null)).toBeNull();
+    expect(planForPrice({ plus: null, pro: null }, 'price_P')).toBeNull();
+  });
+  it('recognises paid plan names only', () => {
+    expect(isPaidPlan('plus')).toBe(true);
+    expect(isPaidPlan('pro')).toBe(true);
+    for (const v of ['free', 'premium', 'PRO', '', null, undefined, 1]) expect(isPaidPlan(v)).toBe(false);
   });
 });
 

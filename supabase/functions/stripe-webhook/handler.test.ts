@@ -14,7 +14,7 @@ function assertEq<T>(actual: T, expected: T, msg: string) {
 const SECRET = 'whsec_test_webhook_secret';
 const NOW = 1_800_000_000;
 const USER = '3c30d720-400f-4956-9c11-ed5dec974d1c';
-const PRICES = { month: 'price_Monthly', year: 'price_Yearly' };
+const PRICES = { plus: 'price_Monthly', pro: 'price_ProMonthly' };
 
 const subscription = (over: Record<string, unknown> = {}, periodEnd = NOW + 30 * 86400, price = 'price_Monthly') => ({
   id: 'sub_123', object: 'subscription', customer: 'cus_123', status: 'active', cancel_at_period_end: false, livemode: false,
@@ -85,8 +85,8 @@ Deno.test('successful checkout: verified, subscription re-fetched, linked to the
   assertEq(stripe.gets, ['/subscriptions/sub_123'], 're-fetches the subscription from Stripe');
   assertEq(store.calls.length, 1, 'one database call');
   const a = store.calls[0];
-  assertEq([a.p_event_id, a.p_customer, a.p_subscription, a.p_status, a.p_price_id, a.p_interval, a.p_metadata_user],
-    ['evt_1', 'cus_123', 'sub_123', 'active', 'price_Monthly', 'month', USER], 'apply arguments');
+  assertEq([a.p_event_id, a.p_customer, a.p_subscription, a.p_status, a.p_price_id, a.p_interval, a.p_metadata_user, a.p_plan],
+    ['evt_1', 'cus_123', 'sub_123', 'active', 'price_Monthly', 'month', USER, 'plus'], 'apply arguments (plan from the price allow-list)');
   assertEq(a.p_period_end, new Date((NOW + 30 * 86400) * 1000).toISOString(), 'period end read from the subscription item');
 });
 
@@ -102,7 +102,8 @@ Deno.test('failed payment (invoice.payment_failed): past_due is applied', async 
   const { handle, store } = setup({ sub: subscription({ status: 'past_due' }) });
   const r = await post(handle, event('invoice.payment_failed', { id: 'in_2', subscription: 'sub_123' }));
   assertEq(r.status, 200, 'status');
-  assertEq(store.calls[0].p_status, 'past_due', 'past_due applied (the database then withholds Premium)');
+  assertEq(store.calls[0].p_status, 'past_due', 'past_due applied (the database keeps the plan only during the grace period)');
+  assertEq(store.calls[0].p_plan, 'plus', 'plan still sent so the grace period knows what to keep');
 });
 
 Deno.test('cancellation at period end, then deletion', async () => {
@@ -192,6 +193,24 @@ Deno.test('never grants access for a price we did not configure; removing access
   const b = setup({ sub: subscription({ status: 'canceled' }, NOW, 'price_SomethingElse') });
   await post(b.handle, event('customer.subscription.deleted', { id: 'sub_123' }));
   assertEq(b.store.calls[0]?.p_status, 'canceled', 'cancellation applied regardless of price');
+  assertEq(b.store.calls[0]?.p_plan, null, 'no plan is sent for an unknown price (nothing can be granted)');
+});
+
+Deno.test('upgrade to Pro and downgrade to Plus: the plan follows the re-fetched price, never the event payload', async () => {
+  const up = setup({ sub: subscription({}, NOW + 30 * 86400, 'price_ProMonthly') });
+  // The event payload claims the Plus price; the re-fetched subscription (truth) is on Pro.
+  const r = await post(up.handle, event('customer.subscription.updated', { id: 'sub_123', items: { data: [{ price: { id: 'price_Monthly' } }] } }));
+  assertEq(r.status, 200, 'status');
+  assertEq([up.store.calls[0].p_plan, up.store.calls[0].p_price_id], ['pro', 'price_ProMonthly'], 'upgrade applied as Pro');
+  const down = setup({ sub: subscription({}, NOW + 30 * 86400, 'price_Monthly') });
+  await post(down.handle, event('customer.subscription.updated', { id: 'sub_123' }));
+  assertEq(down.store.calls[0].p_plan, 'plus', 'downgrade applied as Plus');
+});
+
+Deno.test('a forged plan in the event or metadata cannot change the plan', async () => {
+  const { handle, store } = setup({ sub: subscription({ metadata: { supabase_user_id: USER, plan: 'pro' } }, NOW + 86400, 'price_Monthly') });
+  await post(handle, event('customer.subscription.updated', { id: 'sub_123', plan: 'pro', metadata: { plan: 'pro' } }));
+  assertEq(store.calls[0].p_plan, 'plus', 'plan comes only from the configured price');
 });
 
 Deno.test('not configured: 503 so Stripe retries later; nothing processed', async () => {
