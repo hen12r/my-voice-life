@@ -48,9 +48,9 @@ select pg_temp.expect_error($$insert into public.notes (user_id, body) values ('
   'A cannot insert a note owned by B');
 select pg_temp.expect_error($$update public.profiles set id = 'bbbbbbbb-0000-0000-0000-000000000002'$$,
   'A cannot change profile id');
-select pg_temp.expect_error($$update public.subscriptions set plan = 'premium'$$,
-  'A cannot self-upgrade to premium');
-select pg_temp.expect_error($$insert into public.subscriptions (user_id, plan) values ('aaaaaaaa-0000-0000-0000-000000000001', 'premium')$$,
+select pg_temp.expect_error($$update public.subscriptions set plan = 'pro'$$,
+  'A cannot self-upgrade to pro');
+select pg_temp.expect_error($$insert into public.subscriptions (user_id, plan) values ('aaaaaaaa-0000-0000-0000-000000000001', 'pro')$$,
   'A cannot insert a subscription');
 select pg_temp.expect_error($$update public.usage_counters set notes_created = 0$$,
   'A cannot reset usage counters');
