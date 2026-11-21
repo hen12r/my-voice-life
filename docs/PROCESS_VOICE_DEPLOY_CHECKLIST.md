@@ -1,5 +1,7 @@
 # process-voice deployment checklist + real voice-test checklist
 
+> See also `docs/PROCESS_VOICE_DEPLOY.md` (written in parallel by another session). Both agree; this file adds the live compatibility checks.
+
 ## Context
 The owner approved redeploying `process-voice`, `billing` and `delete-account`, then paused everything: **nothing more is deployed until the responsible adult who manages the Supabase project approves it.**
 
@@ -67,8 +69,8 @@ Goal: replace `process-voice` v2 with the code at branch `claude/stripe-billing`
 8. ☐ Record in `docs/WORK_LOG.md` (versions, checks, results); commit and push to `claude/stripe-billing`.
 
 **Rollback** (any failure in steps 4–6, done at once and reported):
-- Redeploy `process-voice` with the 10 files from git **`d84c1b8`**, `verify_jwt=true`. This is the code that was live as v2, byte-verified. Takes about 2 minutes.
-- Then repeat steps 4–6 against `d84c1b8`.
+- Redeploy `process-voice` with the 10 files in **`supabase/rollback/process-voice-v2/`**, `verify_jwt=true`. This is a byte-exact snapshot of the live v2, re-verified 10/10 against the live source on 21 Nov. Fallback: git `d84c1b8`, which is equivalent. Takes about 2 minutes.
+- Then repeat steps 4–6 against the snapshot.
 - No data, migrations or secrets are involved, so nothing else needs undoing.
 - The same procedure applies to `delete-account`: redeploy from `d84c1b8`.
 
