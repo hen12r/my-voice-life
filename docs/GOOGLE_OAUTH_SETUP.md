@@ -1,10 +1,18 @@
 # Google sign-in setup
 
-**Status:** the "Continue with Google" button is implemented (`src/pages/Auth.tsx`, `signInWithOAuth({ provider: 'google' })`), and tested in a browser up to the redirect. **Not live:**
-- the Google provider is not enabled in Supabase;
-- no Google credentials exist.
+**Status (21 Nov 2026): NOT WORKING in the live project. Do not call it fixed until a real Google login succeeds.**
 
-Until they do, the button shows *"Google sign-in is not set up yet. Please use email and password for now."* Email and password sign-up and login keep working.
+## Diagnosis (evidence, not guesses)
+- **Exact cause:** the Google provider is **disabled** in Supabase Auth for project `nwglzabnezhmxfyuxhmg`.
+- **Evidence (live `auth_logs`):** every `/authorize?provider=google` request fails with `400 validation_failed: "provider is not enabled"`. Most recent: 20 Nov 2026 20:40 UTC, coming from the preview `/app`. `auth.identities` contains only `email` identities.
+- **Why users saw a raw error page:** the old button let the browser navigate straight to Supabase's `/authorize`. When the provider is disabled, Supabase answers with a bare JSON error, and the app's error message never ran.
+- **Code fix (branch `claude/stripe-billing`):**
+  - `src/auth/providers.ts` reads the public `GET /auth/v1/settings` endpoint (`external.google`). If Google is disabled, the button is **not shown at all**: no dead button, no raw error page.
+  - When Google is enabled, the button gets the authorize URL first (`skipBrowserRedirect`), then navigates. A cancelled or refused Google login returns to `/login` with a readable message, and the error is removed from the URL.
+  - Email/password sign-in is untouched.
+  - **Tested** with mocked Supabase in Chromium at 390 px: provider off → no button; provider on → navigates to `/auth/v1/authorize?provider=google&redirect_to=<origin>/app`; `#error=access_denied` → message shown.
+  - Unit tests: `src/auth/providers.test.ts`.
+- **Not done by Claude (owner-only):** creating Google credentials, entering them in Supabase, and changing Auth URL settings. These are production settings and secrets.
 
 Never paste the Client Secret into chat, GitHub or a `VITE_*` variable. It goes only into the Supabase dashboard.
 

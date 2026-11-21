@@ -47,7 +47,12 @@ export default function Landing() {
           ))}
         </div>
       </section>
-      <footer className="px-5 py-8 text-center text-xs text-white/40">© {new Date().getFullYear()} My Voice Life</footer>
+      <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-5 py-8 text-xs text-white/50">
+        <span>© {new Date().getFullYear()} My Voice Life</span>
+        <Link to="/privacy" className="hover:text-white">{t('legal.privacy')}</Link>
+        <Link to="/terms" className="hover:text-white">{t('legal.terms')}</Link>
+        <Link to="/pricing" className="hover:text-white">{t('nav.pricing')}</Link>
+      </footer>
     </div>
   );
 }

@@ -114,7 +114,7 @@ const en = {
   'capture.micUnsupported': 'This browser cannot record audio. Type instead, or try Chrome, Edge, Firefox or Safari.',
   'capture.tooShort': 'That recording was too short.',
   'capture.maxReached': 'Maximum recording length reached.',
-  'capture.privacy': 'Audio is sent for transcription and is not stored. The transcript is kept with your records.',
+  'capture.privacy': 'Your recording is sent to OpenAI to be transcribed and organised. We do not store the audio; the text transcript is kept with your records.',
   'capture.voiceUnverified': 'Voice recognition for this language has not been tested by us yet — please check the transcript.',
   'capture.correctHint': 'Correct any transcription mistakes, then re-organise.',
   'capture.micInsecure': 'The microphone only works on a secure (https) page.',
@@ -385,6 +385,11 @@ const en = {
   'errors.subscription_cancel_failed': 'We could not cancel your subscription, so your account was not deleted. Please try again.',
   'errors.delete_failed': 'Your account could not be deleted. Please try again.',
   'errors.confirmation_required': 'Please confirm that you want to delete your account.',
+  'legal.back': 'Back',
+  'legal.draftNotice': 'Draft — not yet reviewed by a lawyer. Items in brackets must be completed by the owner before public launch.',
+  'legal.privacy': 'Privacy policy',
+  'legal.terms': 'Terms of service',
+  'auth.agree': 'By creating an account you accept the {terms} and the {privacy}.',
 };
 
 export type TranslationKey = keyof typeof en;
@@ -497,7 +502,7 @@ const fr: Record<TranslationKey, string> = {
   'capture.micUnsupported': "Ce navigateur ne peut pas enregistrer l'audio. Écrivez, ou utilisez Chrome, Edge, Firefox ou Safari.",
   'capture.tooShort': 'Enregistrement trop court.',
   'capture.maxReached': 'Durée maximale atteinte.',
-  'capture.privacy': "L'audio est envoyé pour transcription et n'est pas conservé. La transcription est gardée avec vos données.",
+  'capture.privacy': "Votre enregistrement est envoyé à OpenAI pour être transcrit et organisé. Nous ne conservons pas l'audio ; la transcription texte est gardée avec vos données.",
   'capture.voiceUnverified': "La reconnaissance vocale de cette langue n'a pas encore été testée par nous — vérifiez la transcription.",
   'capture.correctHint': 'Corrigez les erreurs de transcription, puis réorganisez.',
   'capture.micInsecure': 'Le micro ne fonctionne que sur une page sécurisée (https).',
@@ -768,6 +773,11 @@ const fr: Record<TranslationKey, string> = {
   'errors.subscription_cancel_failed': 'Nous n’avons pas pu annuler votre abonnement : votre compte n’a pas été supprimé. Réessayez.',
   'errors.delete_failed': 'Votre compte n’a pas pu être supprimé. Réessayez.',
   'errors.confirmation_required': 'Veuillez confirmer la suppression de votre compte.',
+  'legal.back': 'Retour',
+  'legal.draftNotice': 'Brouillon (en anglais) — pas encore relu par un juriste. Les éléments entre crochets doivent être complétés par le propriétaire avant le lancement public.',
+  'legal.privacy': 'Politique de confidentialité',
+  'legal.terms': 'Conditions d\'utilisation',
+  'auth.agree': 'En créant un compte, vous acceptez les {terms} et la {privacy}.',
 };
 
 const dictionaries: Record<string, Record<TranslationKey, string>> = { en, fr };

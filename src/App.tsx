@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import Pricing from './pages/Pricing';
 import BillingSuccess from './pages/BillingSuccess';
+import { PrivacyPolicy, TermsOfService } from './pages/Legal';
 import type { UiLanguage } from './lib/types';
 import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
 import { getLanguage } from '../supabase/functions/_shared/languages.ts';
@@ -74,6 +75,8 @@ export default function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route path="/app" element={<RequireAuth><AppShell /></RequireAuth>}>
               <Route index element={<Dashboard />} />
               <Route path="capture" element={<Capture />} />

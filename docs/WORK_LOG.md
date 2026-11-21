@@ -110,3 +110,11 @@ The owner explicitly approved all four steps ("Attaque", then selected each one)
 
 ## Earlier milestones
 See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
+
+## 2026-11-21 — Google sign-in diagnosis + launch preparation
+- **Google sign-in, exact cause:** live auth logs show `400 provider is not enabled`; the Google provider is disabled in Supabase. Code now hides the button while disabled, and handles redirect/cancel cleanly (`src/auth/providers.ts` + tests). Owner steps in `docs/GOOGLE_OAUTH_SETUP.md`. **Not fixed until a real Google login succeeds.**
+- **Legal drafts:** `/privacy` and `/terms` (no invented identity; owner placeholders marked), linked from landing, register, pricing and settings; capture disclosure names OpenAI.
+- **UX:** small tap targets enlarged; 14 pages × 4 widths mock-audited with no overflow and no console errors.
+- **Checks:** typecheck, 151 Vitest, build, deno check, 71 Deno tests, test:db: all green.
+- **Live state (read-only):** 2 users, email identities only, 0 AI usage, 0 Stripe events, `admins_only`, 0 tables without RLS. No production change made.
+- Report: `docs/LAUNCH_READINESS_REPORT.md`.

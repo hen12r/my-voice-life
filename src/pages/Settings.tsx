@@ -105,7 +105,7 @@ export default function Settings() {
                       <li key={code} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
                         <span dir={l.direction}>{l.nativeName}</span>
                         <Badge tone={l.voice === 'verified' ? 'ok' : 'warn'}>{t(`settings.voice.${l.voice}`)}</Badge>
-                        <button type="button" onClick={() => setSpoken(spoken.filter((c) => c !== code))} className="rounded-full p-0.5 text-muted hover:bg-canvas hover:text-red-600"
+                        <button type="button" onClick={() => setSpoken(spoken.filter((c) => c !== code))} className="-m-1 rounded-full p-1.5 text-muted hover:bg-canvas hover:text-red-600"
                           aria-label={`${t('settings.removeLanguage')} ${l.nativeName}`}><X className="size-3.5" /></button>
                       </li>
                     );
@@ -141,7 +141,7 @@ export default function Settings() {
             {categories.map((c) => (
               <li key={c.id} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
                 <span className="size-2 rounded-full" style={{ background: c.color ?? '#8b6cff' }} aria-hidden />{c.name}
-                <button onClick={() => removeCategory(c.id)} className="rounded-full p-0.5 text-muted hover:bg-canvas hover:text-red-600" aria-label={`${t('common.delete')} ${c.name}`}><X className="size-3.5" /></button>
+                <button onClick={() => removeCategory(c.id)} className="-m-1 rounded-full p-1.5 text-muted hover:bg-canvas hover:text-red-600" aria-label={`${t('common.delete')} ${c.name}`}><X className="size-3.5" /></button>
               </li>
             ))}
           </ul>
@@ -182,6 +182,7 @@ export default function Settings() {
         <CardHeader title={t('settings.privacy')} icon={<ShieldCheck className="size-4 text-accent-600" />} />
         <div className="space-y-4 px-5 pb-5 text-sm">
           <p className="text-muted">{t('settings.audioPolicy')}</p>
+          <p className="flex gap-4 text-xs"><Link to="/privacy" className="text-accent-700 hover:underline">{t('legal.privacy')}</Link><Link to="/terms" className="text-accent-700 hover:underline">{t('legal.terms')}</Link></p>
           <Button variant="secondary" className="text-red-700" onClick={() => setDeleting(true)} icon={<Trash2 className="size-4" />}>{t('settings.deleteAccount')}</Button>
         </div>
       </Card>

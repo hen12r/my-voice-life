@@ -120,6 +120,7 @@ export default function Pricing() {
           </div>
         )}
         <p className="flex items-center justify-center gap-1.5 pt-2 text-center text-xs text-muted"><Lock className="size-3.5" aria-hidden />{t('pricing.secure')}</p>
+        <p className="flex justify-center gap-4 text-xs text-muted"><Link to="/terms" className="underline-offset-2 hover:underline">{t('legal.terms')}</Link><Link to="/privacy" className="underline-offset-2 hover:underline">{t('legal.privacy')}</Link></p>
       </main>
     </div>
   );
