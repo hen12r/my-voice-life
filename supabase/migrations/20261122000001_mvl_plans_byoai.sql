@@ -391,7 +391,8 @@ begin
   insert into public.mvl_byoai_usage (user_id, plan, source, status, audio_seconds)
   values (p_user, v_plan, p_source, 'reserved', p_audio_seconds)
   returning id into v_id;
-  return jsonb_build_object('ok', true, 'reservation_id', v_id, 'plan', v_plan);
+  return jsonb_build_object('ok', true, 'reservation_id', v_id, 'plan', v_plan,
+    'max_output_tokens', s.max_output_tokens_per_call, 'max_capture_seconds', lim.byoai_max_capture_seconds);
 end;
 $$;
 

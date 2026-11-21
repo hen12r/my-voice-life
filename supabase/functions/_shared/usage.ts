@@ -82,6 +82,9 @@ export const REFUSAL_STATUS: Record<string, number> = {
   rate_limited_day: 429,
   budget_daily: 503,
   budget_monthly: 503,
+  // Bring Your Own AI
+  byoai_off: 503,
+  ai_key_required: 403,
 };
 
 export function refusalStatus(reason: string): number {

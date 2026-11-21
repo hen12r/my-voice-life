@@ -35,6 +35,8 @@ const item = (title: string, extra: Json = {}) => ({
   date_text: 'tomorrow', date_confidence: 'explicit', ...extra,
 });
 const EXTRACT_OK = responsesOk({ language: 'en', items: [item('Call my school', { category: 'School' }), item('Prepare my CV'), item('Practise piano')] });
+const BYO_RES_OK = { ok: true, reservation_id: 'byo-1', plan: 'plus', max_output_tokens: 2048, max_capture_seconds: 300 };
+const USER_KEY = 'sk-proj-USERKEYplaceholder0000wxyz';
 const RES_OK = {
   ok: true, reservation_id: 'res-1', plan: 'free', alert_created: false, max_output_tokens: 2048, disable_thinking: true,
   captures_used: 1, captures_limit: 7, minutes_used: 0.1, minutes_limit: 15,
@@ -87,25 +89,34 @@ function makeUser(authenticated = true) {
   return { client: client as unknown as SupabaseClient, inserts };
 }
 
-function makeAdmin(reserve: Json | null = RES_OK, opts: { reserveError?: boolean; recordError?: boolean } = {}) {
+function makeAdmin(reserve: Json | null = RES_OK, opts: { reserveError?: boolean; recordError?: boolean; userKey?: string | null; keyError?: boolean; byoReserve?: Json } = {}) {
   const calls: { name: string; args: Json }[] = [];
+  const keyLookups: Json[] = [];
   const client = {
     rpc(name: string, args: Json) {
+      // Key lookups are recorded separately so the accounting-order assertions stay readable.
+      if (name === 'mvl_byoai_get_key') {
+        keyLookups.push(args);
+        return Promise.resolve(opts.keyError ? { data: null, error: { code: 'XX000', message: 'db down' } } : { data: opts.userKey ?? null, error: null });
+      }
       calls.push({ name, args });
       if (name === 'mvl_reserve_ai_capture') return Promise.resolve(opts.reserveError ? { data: null, error: { message: 'db down' } } : { data: reserve, error: null });
+      if (name === 'mvl_reserve_byoai_capture') return Promise.resolve({ data: opts.byoReserve ?? BYO_RES_OK, error: null });
       if (name.startsWith('mvl_record_')) return Promise.resolve(opts.recordError ? { data: null, error: { message: 'record failed' } } : { data: 0.001, error: null });
       return Promise.resolve({ data: null, error: null });
     },
   };
-  return { client: client as unknown as SupabaseClient, calls, names: () => calls.map((c) => c.name) };
+  return { client: client as unknown as SupabaseClient, calls, keyLookups, names: () => calls.map((c) => c.name) };
 }
 
-function setup(p: { fetch?: ReturnType<typeof makeFetch>; user?: ReturnType<typeof makeUser>; admin?: ReturnType<typeof makeAdmin>; noKey?: boolean; webhook?: string } = {}) {
+function setup(p: { fetch?: ReturnType<typeof makeFetch>; user?: ReturnType<typeof makeUser>; admin?: ReturnType<typeof makeAdmin>; noKey?: boolean; webhook?: string; byoai?: boolean } = {}) {
   const f = p.fetch ?? makeFetch();
   const u = p.user ?? makeUser();
   const a = p.admin ?? makeAdmin();
   const deps: HandlerDeps = {
     provider: p.noKey ? undefined : createOpenAiProvider({ apiKey: 'test-key', transcribeModel: 'gpt-transcribe', textModel: 'gpt-6-luna', fetch: f.fn }),
+    // BYOAI enabled: providers for a user's own key are built per request.
+    userProvider: p.byoai ? (key) => createOpenAiProvider({ apiKey: key, transcribeModel: 'gpt-transcribe', textModel: 'gpt-6-luna', fetch: f.fn }) : undefined,
     alertWebhookUrl: p.webhook,
     userClient: () => u.client, adminClient: () => a.client, fetch: f.fn,
   };
@@ -423,4 +434,91 @@ Deno.test('budget refusal with a new alert notifies the admin webhook without an
   const sent = JSON.stringify(hook!.json);
   assert(!sent.includes('user-1') && !sent.includes('secret plans'), 'webhook contains no user id or content');
   assert(sent.includes('budget_daily'), 'webhook names the alert kind');
+});
+
+// ---------- Bring Your Own AI (the user's own OpenAI key, from Vault) ----------
+Deno.test('BYOAI: the user\'s own key is used, with the BYOAI reservation; the platform budget path is never touched', async () => {
+  const s = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY }) });
+  const r = await s.handler(voiceRequest());
+  assertEq(r.status, 200, 'status');
+  assertEq(s.a.keyLookups, [{ p_user: 'user-1', p_provider: 'openai' }], 'key looked up for the signed-in user only');
+  assertEq(s.a.names(), ['mvl_reserve_byoai_capture', 'mvl_record_byoai_call', 'mvl_record_byoai_call', 'mvl_finish_byoai_capture'], 'BYOAI accounting only');
+  assert(!s.a.names().some((n) => n.includes('_ai_capture') && !n.includes('byoai')), 'no platform reservation or budget call');
+  for (const c of s.f.calls) assertEq(c.headers.authorization, `Bearer ${USER_KEY}`, `user key used for ${c.url}`);
+  const body = await r.json();
+  assertEq(body.usage, { plan: 'plus', byoai: true }, 'usage reports BYOAI, no platform allowance');
+  assert(!JSON.stringify(body).includes(USER_KEY), 'the key is never returned to the browser');
+  assertEq(s.u.inserts[0].provider, 'byoai-openai:gpt-transcribe+gpt-6-luna', 'session labelled as BYOAI');
+});
+
+Deno.test('BYOAI: recorded usage (seconds, then tokens) goes to the user\'s BYOAI reservation', async () => {
+  const s = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY }) });
+  await s.handler(voiceRequest());
+  assertEq(s.a.calls[0].args, { p_user: 'user-1', p_source: 'voice', p_audio_seconds: s.a.calls[0].args.p_audio_seconds }, 'reserve args');
+  assert(Number(s.a.calls[0].args.p_audio_seconds) > 3.9, 'length measured from the real file');
+  assertEq([s.a.calls[1].args.p_reservation, s.a.calls[1].args.p_input_tokens], ['byo-1', 0], 'transcription seconds recorded');
+  assertEq([s.a.calls[2].args.p_input_tokens, s.a.calls[2].args.p_output_tokens], [900, 150], 'tokens recorded');
+  assertEq(s.a.calls[3].args, { p_reservation: 'byo-1', p_status: 'ok', p_error_code: null }, 'closed ok');
+});
+
+Deno.test('BYOAI: no key connected and no platform key → ai_key_required, nothing called', async () => {
+  const s = setup({ byoai: true, noKey: true, admin: makeAdmin(RES_OK, { userKey: null }) });
+  const r = await s.handler(voiceRequest());
+  assertEq([r.status, await code(r)], [403, 'ai_key_required'], 'refused');
+  assertEq(s.f.calls.length, 0, 'no provider call'); assertEq(s.a.calls.length, 0, 'no reservation');
+});
+
+Deno.test('BYOAI: no user key but a platform key (staff testing) → the existing platform path', async () => {
+  const s = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: null }) });
+  assertEq((await s.handler(voiceRequest())).status, 200, 'status');
+  assertEq(s.a.names()[0], 'mvl_reserve_ai_capture', 'platform reservation (allowance, budgets, admins_only)');
+  for (const c of s.f.calls) assertEq(c.headers.authorization, 'Bearer test-key', 'platform key used');
+});
+
+Deno.test('BYOAI: key lookup failure → AI paused for safety, nothing called', async () => {
+  const s = setup({ byoai: true, admin: makeAdmin(RES_OK, { keyError: true }) });
+  const r = await s.handler(voiceRequest());
+  assertEq([r.status, await code(r)], [503, 'accounting_unavailable'], 'refused');
+  assertEq(s.f.calls.length, 0, 'no provider call');
+});
+
+Deno.test('BYOAI: refusals from the database (switch off, test mode, rate limits, too long) → no provider call', async () => {
+  for (const [reason, status] of [['byoai_off', 503], ['ai_test_mode', 403], ['rate_limited_day', 429], ['audio_too_long', 413], ['ai_paused', 503]] as const) {
+    const s = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY, byoReserve: { ok: false, reason } }) });
+    const r = await s.handler(voiceRequest());
+    assertEq([r.status, await code(r)], [status, reason], reason);
+    assertEq(s.f.calls.length, 0, `${reason}: no provider call`);
+  }
+});
+
+Deno.test('BYOAI: rejected key (401) → marked invalid, ai_key_invalid, key never logged or returned', async () => {
+  const s = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY }), fetch: makeFetch({ transcribe: [FAKE_401] }) });
+  const { result: r, logs } = await captureLogs(() => s.handler(voiceRequest()));
+  const text = await r.text();
+  assertEq([r.status, JSON.parse(text).error.code], [400, 'ai_key_invalid'], 'user told to reconnect');
+  assert(s.a.names().includes('mvl_byoai_mark_invalid'), 'the stored key is marked invalid (not used again)');
+  assertEq(s.a.calls.find((c) => c.name === 'mvl_finish_byoai_capture')?.args.p_error_code, 'upstream_401', 'capture closed as failed');
+  assert(!logs.includes(USER_KEY) && !logs.includes('wxyz') && !logs.includes('ab12'), 'no key or key fragment in logs');
+  assert(!text.includes(USER_KEY) && !logs.includes('OPENAI_API_KEY'), 'no key in the response; logs do not blame the platform secret');
+});
+
+Deno.test('BYOAI: project without model access (403) and no credit (429 insufficient_quota) → specific messages', async () => {
+  const s1 = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY }), fetch: makeFetch({ responses: [{ __status: 403, body: { error: { message: 'Project does not have access to model gpt-6-luna', code: 'model_not_allowed' } } }] }) });
+  const r1 = await s1.handler(voiceRequest());
+  assertEq([r1.status, await code(r1)], [403, 'ai_key_no_model_access'], '403');
+  assert(!s1.a.names().includes('mvl_byoai_mark_invalid'), 'a model-access problem does not invalidate the key');
+  const s2 = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY }), fetch: makeFetch({ transcribe: [{ __status: 429, body: { error: { message: 'You exceeded your current quota', type: 'insufficient_quota', code: 'insufficient_quota' } } }] }) });
+  const r2 = await s2.handler(voiceRequest());
+  assertEq([r2.status, await code(r2)], [402, 'ai_key_no_credit'], 'no credit');
+  const s3 = setup({ byoai: true, admin: makeAdmin(RES_OK, { userKey: USER_KEY }), fetch: makeFetch({ transcribe: [429] }) });
+  const r3 = await s3.handler(voiceRequest());
+  assertEq([r3.status, await code(r3)], [503, 'ai_busy'], 'plain rate limit stays ai_busy');
+});
+
+Deno.test('BYOAI: the user key is sent only to api.openai.com, never to the alert webhook', async () => {
+  const s = setup({ byoai: true, webhook: 'https://hooks.example.test/x', admin: makeAdmin(RES_OK, { userKey: USER_KEY }) });
+  await s.handler(voiceRequest());
+  for (const c of s.f.calls) {
+    if (JSON.stringify(c.headers).includes(USER_KEY)) assert(c.url.startsWith('https://api.openai.com/'), `key only sent to OpenAI, not ${c.url}`);
+  }
 });
