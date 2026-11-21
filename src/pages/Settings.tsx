@@ -6,6 +6,7 @@ import { errorMessage, useI18n } from '../lib/i18n';
 import { createCategory, deleteAccount, deleteCategory, getSubscription, updateProfile } from '../lib/api';
 import { planNameKey } from '../lib/plans';
 import { AiProviderCard } from '../components/AiProviderCard';
+import { InstallCard } from '../pwa/InstallCard';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -150,6 +151,8 @@ export default function Settings() {
       </Card>
 
       <AiProviderCard />
+
+      <InstallCard />
 
       <Card>
         <CardHeader title={t('settings.plan')} icon={<Sparkles className="size-4 text-accent-600" />} />

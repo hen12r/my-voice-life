@@ -127,7 +127,8 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   // Return to the page that sent the user here (internal paths only, never an external URL).
   const from = (useLocation().state as { from?: unknown } | null)?.from;
-  const target = typeof from === 'string' && /^\/(app|pricing)(\/|$)/.test(from) ? from : '/app';
+  // Only our own pages (never another site): /app… or /pricing…, optionally with a query string.
+  const target = typeof from === 'string' && /^\/(app|pricing)(\/|\?|$)/.test(from) && !from.startsWith('//') ? from : '/app';
   if (session) return <Navigate to={target} replace />;
 
   const submit = async (e: FormEvent) => {

@@ -18,6 +18,7 @@ import Admin from './pages/Admin';
 import Pricing from './pages/Pricing';
 import BillingSuccess from './pages/BillingSuccess';
 import Billing from './pages/Billing';
+import { PwaBanners } from './pwa/PwaBanners';
 import { PrivacyPolicy, TermsOfService } from './pages/Legal';
 import type { UiLanguage } from './lib/types';
 import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
@@ -37,7 +38,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
   if (loading) return <Spinner />;
-  if (!session) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  // Keep the query string so deep links (e.g. /app/billing?changed=1, app shortcuts) survive sign-in.
+  if (!session) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   return <>{children}</>;
 }
 
@@ -69,6 +71,7 @@ export default function App() {
     <AuthProvider>
       <Localised>
         <BrowserRouter>
+          <PwaBanners />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
