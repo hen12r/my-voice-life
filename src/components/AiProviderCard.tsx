@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ExternalLink, KeyRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
-import { connectOpenAiKey, disconnectOpenAiKey, getAiConnections } from '../lib/api';
+import { ApiError, connectOpenAiKey, disconnectOpenAiKey, getAiConnections } from '../lib/api';
 import type { AiConnection } from '../lib/types';
 import { Alert, Badge, Button, Card, CardHeader, Field, Input } from './ui';
 
@@ -17,9 +17,12 @@ export function AiProviderCard() {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  // The server function isn't deployed on this backend yet: show that, never a form that can't work.
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    getAiConnections().then((c) => setConn(c.find((x) => x.provider === 'openai') ?? null)).catch(() => setConn(null));
+    getAiConnections().then((c) => setConn(c.find((x) => x.provider === 'openai') ?? null))
+      .catch((e) => { if (e instanceof ApiError && e.status === 404) setUnavailable(true); setConn(null); });
   }, []);
 
   const connect = async (e: FormEvent) => {
@@ -47,13 +50,14 @@ export function AiProviderCard() {
     finally { setBusy(false); }
   };
 
-  const showForm = conn === null || editing;
+  const showForm = !unavailable && (conn === null || editing);
   return (
     <Card>
       <CardHeader title={t('ai.title')} icon={<KeyRound className="size-4 text-accent-600" />} />
       <div id="ai" className="space-y-4 px-5 pb-5 text-sm">
         <p className="text-muted">{t('ai.intro')}</p>
-        {usage && usage.byoai_allowed === false && <Alert kind="info">{t('ai.notOpenYet')}</Alert>}
+        {unavailable && <Alert kind="info">{t('ai.unavailable')}</Alert>}
+        {!unavailable && usage && usage.byoai_allowed === false && <Alert kind="info">{t('ai.notOpenYet')}</Alert>}
         {conn && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-ink">{t('ai.keyConnected').replace('{hint}', conn.hint)}</span>
