@@ -1,0 +1,27 @@
+{
+  "_comment": "TEMPLATE for Bubblewrap (Trusted Web Activity). Replace every <...> value before running `bubblewrap update && bubblewrap build`. Not built, not published.",
+  "packageId": "<reverse-domain, e.g. com.example.myvoicelife>",
+  "host": "<production-domain, e.g. app.example.com>",
+  "name": "My Voice Life",
+  "launcherName": "Voice Life",
+  "display": "standalone",
+  "orientation": "default",
+  "themeColor": "#0b1230",
+  "navigationColor": "#0b1230",
+  "backgroundColor": "#f6f6fa",
+  "enableNotifications": false,
+  "startUrl": "/app",
+  "iconUrl": "https://<production-domain>/icon-512.png",
+  "maskableIconUrl": "https://<production-domain>/icon-maskable-512.png",
+  "webManifestUrl": "https://<production-domain>/manifest.webmanifest",
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    { "name": "New voice capture", "shortName": "Capture", "url": "/app/capture", "chosenIconUrl": "https://<production-domain>/icon-192.png" },
+    { "name": "Notes", "shortName": "Notes", "url": "/app/notes", "chosenIconUrl": "https://<production-domain>/icon-192.png" },
+    { "name": "Tasks", "shortName": "Tasks", "url": "/app/tasks", "chosenIconUrl": "https://<production-domain>/icon-192.png" }
+  ],
+  "signingKey": { "path": "<path-to-keystore-on-the-owner's-machine — never commit>", "alias": "my-voice-life" },
+  "fallbackType": "customtabs",
+  "features": {}
+}

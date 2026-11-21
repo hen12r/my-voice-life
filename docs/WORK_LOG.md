@@ -162,3 +162,10 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 - Frontend: Pricing (3 plans + "AI billed separately" notice), new Billing page, "Your AI provider" card, Capture states, plan-limit messages.
 - Tests: all DB suites, 100 function tests, 167 unit tests, 8 mocked browser scenarios at 4 widths. **No real Stripe test-mode run and no real OpenAI run yet** (no account / key).
 - Docs: `STRIPE_SETUP.md` rewritten, new `BYOAI_SECURITY.md`, legal drafts updated, report `SUBSCRIPTIONS_BYOAI_REPORT.md`.
+
+## 2026-11-21 — Installable app (PWA) + platform plan
+- Owner decisions recorded for next sessions: **Hybrid AI** (included allowances + optional own key) and **monthly + yearly prices**. Not implemented yet.
+- Service worker (public static files only; never Supabase/Stripe/OpenAI, non-GET, Authorization or navigations), offline page + banner, user-confirmed updates, complete manifest (id, maskable icons, screenshots, shortcuts), install card (real prompt / iOS steps / installed), deep links keep their query string through sign-in.
+- `npm run test:pwa`: real Chromium on the production build (Supabase mocked); all checks pass, installability 0 errors. 172 unit tests.
+- Platform plan (`docs/PLATFORMS.md`): PWA everywhere now; Android via TWA (template in `platforms/android-twa/`); iOS App Store only with native value (Capacitor); no desktop wrapper. Biggest gap: reminders don't notify (Web Push not built).
+- Report: `docs/PWA_PLATFORM_REPORT.md`. Nothing deployed or published.

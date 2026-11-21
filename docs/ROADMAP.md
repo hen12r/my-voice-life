@@ -100,7 +100,9 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Optional sound cues (off by default) | ✅ | unit tests; toggle in Settings |
 | Reduced motion | ✅ | emulated `prefers-reduced-motion: reduce`: no breathing, rings or stagger |
 | Task completion feedback | ✅ | browser test |
-| PWA icons (PNG 192/512/maskable, apple-touch) | ✅ files / ⬜ install | manifest served; home-screen install not tested on a phone |
+| Installable app (PWA): service worker, offline page, safe updates, install card, shortcuts, screenshots | ✅ Chromium / 🟡 devices | `npm run test:pwa` (real Chromium, production build, mocked Supabase): installability 0 errors; **real iPhone/Android/Safari not tested** |
+| Reminder notifications (Web Push) | ⬜ | not built: needs VAPID keys, subscriptions table, scheduler (docs/PLATFORMS.md) |
+| Store apps (Play via TWA, App Store via Capacitor) | ⬜ prepared | TWA template + steps; nothing built or published |
 
 ## Payments: Stripe, test mode (2026-11-20, branch `claude/stripe-billing`)
 | Item | Status | Evidence |
