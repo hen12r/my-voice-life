@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isOriginAllowed, parseAllowedOrigins } from './cors.ts';
+import { allowOriginHeader, isOriginAllowed, parseAllowedOrigins } from './cors.ts';
 
 const allowed = parseAllowedOrigins('http://localhost:3000, https://my-voice-life.vercel.app, https://my-voice-life-*-henry7.vercel.app');
 
@@ -35,5 +35,13 @@ describe('CORS origin matching', () => {
   });
   it('an explicit secret overrides the default', () => {
     expect(parseAllowedOrigins('https://myvoicelife.app')).toEqual(['https://myvoicelife.app']);
+  });
+  it('echoes only an allowed origin, never a pattern, and nothing for others', () => {
+    const d = parseAllowedOrigins(undefined);
+    const preview = 'https://my-voice-life-git-claude-stripe-billing-henry7.vercel.app';
+    expect(allowOriginHeader(preview, d)).toBe(preview);
+    expect(allowOriginHeader('https://evil.example', d)).toBeNull();
+    expect(allowOriginHeader(null, d)).toBeNull();
+    expect(allowOriginHeader('https://evil.example', ['https://my-voice-life-*-henry7.vercel.app'])).toBeNull();
   });
 });

@@ -118,3 +118,17 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 - **Checks:** typecheck, 151 Vitest, build, deno check, 71 Deno tests, test:db: all green.
 - **Live state (read-only):** 2 users, email identities only, 0 AI usage, 0 Stripe events, `admins_only`, 0 tables without RLS. No production change made.
 - Report: `docs/LAUNCH_READINESS_REPORT.md`.
+
+## 2026-11-21 (later) — first tests against the REAL preview and backend
+- **How:** the session network was limited to the preview and Supabase hosts (new personal environment "My Voice Life", approved). A temporary Vercel share link was used to pass Deployment Protection; the link was not published. Headless Chromium; **Claude in Chrome was not available**.
+- **Live results:**
+  - 9 public pages at 360/390/768/1366 px: no overflow, no console errors.
+  - `/app` redirects to `/login`.
+  - The Google button is hidden (the provider is still off).
+  - A wrong password shows a clear message.
+  - Registration validates email and password in the browser.
+  - Pricing loads the real `billing` function (200) and honestly says Premium is unavailable.
+  - CSP, `X-Frame-Options: DENY`, `nosniff`, `Permissions-Policy: microphone=(self)` and HSTS are present.
+  - CORS allows the preview origin for all functions; `process-voice` without a token returns 401; the webhook with a bad signature returns 503 (not configured).
+- **Fixed (code, not yet deployed):** a disallowed origin was sent back the raw pattern `https://my-voice-life-*-henry7.vercel.app` as `Access-Control-Allow-Origin`. That was harmless (browsers reject it) but wrong. Now the header is omitted (`allowOriginHeader`, + test). It goes live only after an approved redeploy of the functions.
+- **Not tested live:** anything behind sign-in (no test account available; see the report).

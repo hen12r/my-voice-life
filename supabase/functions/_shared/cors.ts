@@ -27,3 +27,12 @@ export function isOriginAllowed(origin: string | null, allowed: string[]): boole
     return e.includes('*') ? patternToRegex(e).test(o) : e === o;
   });
 }
+
+/**
+ * Value for Access-Control-Allow-Origin: the caller's origin when it is allowed, otherwise null
+ * (the header is omitted and the browser blocks the response). A pattern entry such as
+ * `https://my-voice-life-*-henry7.vercel.app` is never sent back literally.
+ */
+export function allowOriginHeader(origin: string | null, allowed: string[]): string | null {
+  return isOriginAllowed(origin, allowed) ? origin : null;
+}

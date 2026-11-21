@@ -1,5 +1,12 @@
 # Stripe payments: setup and testing (TEST MODE ONLY)
 
+> **Live status, checked 21 Nov 2026 against the real deployment:**
+> - `billing` and `stripe-webhook` are deployed but **not configured** (no Stripe secrets).
+> - The Pricing page loads the real `billing` function and shows "Premium is not available yet. No payment can be taken."
+> - A webhook call with a bad signature returns `503 billing_not_configured`.
+> - 0 Stripe events and 0 premium subscriptions in the database.
+> - Nothing below has been run against Stripe yet. The test-mode checklist ("Test in test mode") is still to do once the responsible adult has created the test account and secrets.
+
 **Status (2026-11-20):** built and tested offline, but **not connected.**
 - No Stripe account is linked, no key is stored anywhere, and nothing is deployed.
 - Migration 5 is **not applied**.
