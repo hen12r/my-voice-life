@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import Pricing from './pages/Pricing';
 import BillingSuccess from './pages/BillingSuccess';
+import Billing from './pages/Billing';
 import { PrivacyPolicy, TermsOfService } from './pages/Legal';
 import type { UiLanguage } from './lib/types';
 import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
@@ -86,6 +87,7 @@ export default function App() {
               <Route path="memory" element={<Memory />} />
               <Route path="settings" element={<Settings />} />
               <Route path="admin" element={<Admin />} />
+              <Route path="billing" element={<Billing />} />
               <Route path="billing/success" element={<BillingSuccess />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

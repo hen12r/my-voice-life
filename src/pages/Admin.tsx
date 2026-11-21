@@ -156,7 +156,7 @@ export default function Admin() {
             <Stat label={t('admin.total')} value={finance.users.total} source="recorded" />
             <Stat label={t('admin.mau')} value={finance.users.monthly_active} source="recorded" />
             <Stat label={t('admin.free')} value={finance.users.free} source="recorded" />
-            <Stat label={t('admin.premium')} value={`${finance.users.premium} (${finance.users.premium_monthly}/${finance.users.premium_annual})`} source="recorded" />
+            <Stat label={t('admin.paid')} value={`${finance.users.paid} (Plus ${finance.users.plus} / Pro ${finance.users.pro})`} source="recorded" />
           </div>
           <table className="mt-5 w-full text-sm">
             <tbody>
@@ -244,7 +244,7 @@ function PlanLimitsEditor({ limits, onSave }: { limits: PlanLimits[]; onSave: (l
       <div className="space-y-4 px-5 py-4">
         {rows.map((row, i) => (
           <form key={row.plan} onSubmit={(e) => { e.preventDefault(); onSave(row); }} className="grid grid-cols-2 items-end gap-3 sm:grid-cols-7">
-            <div className="col-span-2 sm:col-span-1"><Badge tone={row.plan === 'premium' ? 'accent' : 'neutral'}>{row.plan}</Badge></div>
+            <div className="col-span-2 sm:col-span-1"><Badge tone={row.plan !== 'free' ? 'accent' : 'neutral'}>{row.plan}</Badge></div>
             {fields.map(([f, label]) => (
               <Field key={f} label={t(label)}>
                 <Input type="number" min={1} required value={row[f] as number}

@@ -22,7 +22,8 @@ export default function BillingSuccess() {
   const check = useCallback(async () => {
     // Server-computed plan (effective_plan in the database) — the only source of truth.
     const u = await getMyUsage();
-    if (u?.plan === 'premium') { void refreshUsage(); return true; }
+    // Checkout is only offered to users without a live subscription, so any paid plan = this payment.
+    if (u && u.plan !== 'free') { void refreshUsage(); return true; }
     return false;
   }, [refreshUsage]);
 
@@ -39,7 +40,7 @@ export default function BillingSuccess() {
     return () => { cancelled = true; };
   }, [state, check]);
 
-  useEffect(() => { if (usage?.plan === 'premium') setState('active'); }, [usage?.plan]);
+  useEffect(() => { if (usage && usage.plan !== 'free') setState('active'); }, [usage]);
 
   return (
     <div className="mx-auto max-w-md pt-6">
@@ -55,7 +56,7 @@ export default function BillingSuccess() {
           <div aria-live="polite">
             <CheckCircle2 className="animate-pop mx-auto size-10 text-accent-600" aria-hidden />
             <h1 className="mt-3 text-lg font-semibold text-ink">{t('billing.active')}</h1>
-            <Link to="/app" className="mt-5 inline-block"><Button>{t('pricing.backToApp')}</Button></Link>
+            <Link to="/app/billing" className="mt-5 inline-block"><Button>{t('billing.viewBilling')}</Button></Link>
           </div>
         )}
         {state === 'slow' && (

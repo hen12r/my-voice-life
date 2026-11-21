@@ -1,6 +1,6 @@
 import { functionsUrl, supabase } from './supabase';
 import type { ProposedItem } from '../../supabase/functions/_shared/extraction.ts';
-import type { AdminFinanceSummary, AdminUsageSummary, BillingInfo, CalendarEvent, Category, MemoryHit, MyUsage, Note, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
+import type { AdminFinanceSummary, AdminUsageSummary, AiConnection, BillingInfo, CalendarEvent, Category, Invoice, MemoryHit, MyUsage, Note, PaidPlan, PlanLimits, Profile, Reminder, Subscription, Task } from './types';
 import { zonedTimeToUtc } from './dates';
 
 export class ApiError extends Error {
@@ -221,8 +221,27 @@ async function billingRedirect(body: Record<string, unknown>): Promise<string> {
   if (!isStripeHostedUrl(url)) throw new ApiError('billing_failed', 'Unexpected redirect');
   return url;
 }
-export const startCheckout = (interval: 'month' | 'year') => billingRedirect({ action: 'checkout', interval });
+/** The browser only names a plan; the server picks the Stripe price. */
+export const startCheckout = (plan: PaidPlan) => billingRedirect({ action: 'checkout', plan });
+/** Upgrade/downgrade: Stripe's own page confirms the switch (with proration) for an existing subscription. */
+export const changePlan = (plan: PaidPlan) => billingRedirect({ action: 'change_plan', plan });
 export const openBillingPortal = () => billingRedirect({ action: 'portal' });
+export async function getInvoices(): Promise<Invoice[]> {
+  const { invoices } = await callFunction<{ invoices: Invoice[] }>('billing', JSON.stringify({ action: 'invoices' }), true);
+  return invoices;
+}
+
+// ---------------- Bring Your Own AI (the user's own OpenAI key). The key is sent once to our
+// Edge Function, which validates it with OpenAI and stores it in Supabase Vault. It is never
+// returned: the app only ever sees a 4-character hint.
+export async function getAiConnections(): Promise<AiConnection[]> {
+  const { connections } = await callFunction<{ connections: AiConnection[] }>('ai-connections', JSON.stringify({ action: 'status' }), true);
+  return connections;
+}
+export const connectOpenAiKey = (apiKey: string) =>
+  callFunction<{ connected: boolean; hint: string }>('ai-connections', JSON.stringify({ action: 'connect', provider: 'openai', api_key: apiKey }), true);
+export const disconnectOpenAiKey = () =>
+  callFunction<{ connected: boolean }>('ai-connections', JSON.stringify({ action: 'disconnect', provider: 'openai' }), true);
 
 export function deleteAccount() {
   return callFunction<{ deleted: boolean }>('delete-account', JSON.stringify({ confirm: 'DELETE' }), true);
