@@ -3,7 +3,7 @@
 **Scope agreed for this session:** the installable app (PWA) and the platform plan. The rest of the brief (design system and dark mode, onboarding, core-feature review and data export, multi-provider AI, billing changes) was **not started** in this session; it is planned below.
 **Nothing was deployed, migrated, merged, published or charged.**
 
-## Decisions you made (recorded, to implement next)
+## Decisions you made: built after this report (commits `5ee8cba`, `def8e3d`; see `docs/STRIPE_SETUP.md`)
 | Decision | Effect on the code (not yet done) |
 |---|---|
 | **AI model: Hybrid.** Plans include AI allowances paid by the project key; users may also connect their own key | Re-enable the included allowance for Free/Plus/Pro (Free 7 captures / 15 min, Plus 300 / 600, Pro higher) through the existing `mvl_reserve_ai_capture` budgets. Keep BYOAI as an option: own key first, else the included allowance. Rework Pricing copy (no longer "no AI credits"). Needs a migration (allowances for plus/pro, `ai_mode` change approved separately) and the CLAUDE.md rule 13 change. |

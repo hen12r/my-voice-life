@@ -1,5 +1,7 @@
 # Subscriptions + Bring Your Own AI: report
 
+> **Update (later on 21 Nov):** you switched to **hybrid AI** (included allowances: Free 7/15, Plus 300/600, Pro 600/1200, plus an optional own key) and **monthly + yearly** prices. Both are built and tested (commits `5ee8cba`, `def8e3d`). Where this report says "pure BYOAI" or "no AI credits", that is superseded. Your earlier objection about students without OpenAI accounts is resolved by the included allowance.
+
 **Branch:** `claude/stripe-billing` (draft PR #4). **Date:** 21 November 2026.
 **Nothing was deployed, migrated, merged or charged.** Stripe stays in test mode and isn't connected.
 

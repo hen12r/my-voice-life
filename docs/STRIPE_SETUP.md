@@ -1,8 +1,10 @@
 # Stripe payments: setup and testing (TEST MODE ONLY)
 
-**Business model (owner decision, 21 Nov 2026):** Freemium + Bring Your Own AI.
-- Plans: **Free $0**, **Plus $4.99/month**, **Pro $9.99/month**. These are proposed prices, not final; the real amounts are whatever you create in Stripe.
-- Plans pay for the app and its limits. **No plan includes AI credits.** Voice uses the user's own OpenAI key, and OpenAI bills them directly.
+**Business model (owner decisions, 21 Nov 2026):** Free / Plus / Pro with **hybrid AI**.
+- Plans: **Free $0**, **Plus $4.99/month**, **Pro $9.99/month**, each paid plan optionally also **yearly** (proposed $49.90 / $99.90). These are proposals, not final; the real amounts are whatever you create in Stripe.
+- **Each plan includes a monthly AI allowance**, paid from the project's OpenAI key: Free 7 captures / 15 min, Plus 300 / 600, Pro 600 / 1200 (proposed, in `mvl_plan_limits`). It is protected by the hard AI budgets (default $2/day, $20/month: raise them deliberately as paying users grow, or included AI stops for everyone once a budget is reached).
+- Users may **also** connect their own OpenAI key. It is used first, and OpenAI bills them directly.
+- Worst-case AI cost per fully used allowance, at the price book's $0.0045/min plus a little text processing: Free about $0.07, Plus about $2.80, Pro about $5.50 per month.
 
 **Status (21 Nov 2026):** built and tested offline (simulated Stripe), **not connected and not deployed.**
 - No Stripe account is linked and no Stripe key is stored anywhere.
@@ -57,13 +59,13 @@ Browser ◀── /app/billing/success polls the SERVER's plan; the URL itself p
 **1. Stripe account, in Test mode** (an adult owns it). Everything below happens in test mode / a sandbox.
 
 **2. Products and prices** (you choose the amounts; the app shows exactly what Stripe returns)
-- Product **"My Voice Life Plus"** → a **recurring monthly** price (proposed 4.99).
-- Product **"My Voice Life Pro"** → a **recurring monthly** price (proposed 9.99).
-- Copy each **Price ID** (`price_…`). Two different prices are required; the same price for both plans is refused.
+- Product **"My Voice Life Plus"** → a **recurring monthly** price (proposed 4.99) and, optionally, a **recurring yearly** price (proposed 49.90).
+- Product **"My Voice Life Pro"** → a **recurring monthly** price (proposed 9.99) and, optionally, a **recurring yearly** price (proposed 99.90).
+- Copy each **Price ID** (`price_…`). Every slot needs a different price; a price used twice is refused. The Monthly/Yearly switch appears only when at least one yearly price is configured.
 
 **3. Customer Portal** (Dashboard → Settings → Billing → Customer portal)
 - Allow: update payment method, **cancel subscription** (at period end recommended), invoice history.
-- **Subscription update: on**, with both products and their monthly prices listed. Choose your proration behaviour (Stripe's default is fine). Without this, "change plan" fails.
+- **Subscription update: on**, with both products and **all** their prices (monthly and yearly) listed. Choose your proration behaviour (Stripe's default is fine). Without this, "change plan" fails.
 - Save it once in test mode.
 
 **4. API key.** Recommended: a **restricted key** (`rk_test_…`) with only:
@@ -87,8 +89,10 @@ Browser ◀── /app/billing/success polls the SERVER's plan; the URL itself p
 |---|---|
 | `STRIPE_SECRET_KEY` | `rk_test_…` or `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` |
-| `STRIPE_PRICE_PLUS_MONTHLY` | Plus `price_…` |
-| `STRIPE_PRICE_PRO_MONTHLY` | Pro `price_…` |
+| `STRIPE_PRICE_PLUS_MONTHLY` | Plus monthly `price_…` |
+| `STRIPE_PRICE_PLUS_YEARLY` | Plus yearly `price_…` (optional) |
+| `STRIPE_PRICE_PRO_MONTHLY` | Pro monthly `price_…` |
+| `STRIPE_PRICE_PRO_YEARLY` | Pro yearly `price_…` (optional) |
 
 The old `STRIPE_PRICE_PREMIUM_*` names are no longer read.
 
@@ -97,6 +101,7 @@ The old `STRIPE_PRICE_PREMIUM_*` names are no longer read.
    - Pre-flight (read-only): `supabase/preflight/preflight_20261122_migration_6.sql`. Run on 21 Nov: **0 user rows would change**.
    - Rollback: `supabase/rollback/rollback_20261122_migration_6_plans_byoai.sql` (tested).
 2. "Approve deploying billing, stripe-webhook, process-voice, ai-connections". All four go to the only Supabase project, which the previews also use. Stripe stays inert without step 6.
+3. Separately, when you're ready for paying users to get included AI: "approve `ai_mode` = on" (today `admins_only`), with budgets you choose.
 
 ---
 
@@ -110,7 +115,7 @@ Use the preview, signed in. Mark each line ✅/❌.
 | 3 | Stripe Dashboard → Webhooks → your endpoint | `200` deliveries; Supabase logs `→ applied` |
 | 4 | Resend the same event from the Dashboard | `200 duplicate`; nothing changes |
 | 5 | Billing → **Upgrade to Pro** → confirm on Stripe | Back on Billing: "sent to Stripe" notice, then Pro once the webhook arrives; a proration invoice in the history |
-| 6 | Billing → **Switch to Plus** | Plus again after Stripe confirms |
+| 6 | Billing → **Switch to Plus**, then **Switch to yearly** | Plus again, then yearly billing (with proration) after Stripe confirms |
 | 7 | Billing → **Manage or cancel** → cancel | "Ends on …"; the plan stays until then |
 | 8 | Checkout with `4000 0000 0000 9995` (declined) | Stripe shows the decline; the app stays Free |
 | 9 | Renewal and failed renewal: Stripe **test clocks** + card `4000 0000 0000 0341` | Renewal extends the date. A failed renewal shows "Your last payment failed", keeps the plan during the grace period, then Free after `unpaid` |

@@ -169,3 +169,9 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 - `npm run test:pwa`: real Chromium on the production build (Supabase mocked); all checks pass, installability 0 errors. 172 unit tests.
 - Platform plan (`docs/PLATFORMS.md`): PWA everywhere now; Android via TWA (template in `platforms/android-twa/`); iOS App Store only with native value (Capacitor); no desktop wrapper. Biggest gap: reminders don't notify (Web Push not built).
 - Report: `docs/PWA_PLATFORM_REPORT.md`. Nothing deployed or published.
+
+## 2026-11-21 — Hybrid AI allowances + monthly/yearly prices (built and tested; nothing deployed)
+- Migration 6 (still unapplied, edited in place): Pro allowance 600 captures / 1200 min / 10-minute recordings; yearly finance prices; finance summary with monthly + yearly (/12).
+- Stripe config per plan and interval (`STRIPE_PRICE_{PLUS,PRO}_{MONTHLY,YEARLY}`, yearly optional); billing checkout/change_plan take an interval, including monthly↔yearly on the same plan.
+- Frontend: Monthly/Yearly switch, included allowance in plan features, Billing interval switch and included-AI meters; legal drafts updated.
+- Tests: DB suites, 103 function tests, 172 unit tests, mocked browser checks (yearly + hybrid). The included AI still needs `ai_mode = on` (owner approval) and adequate budgets.
