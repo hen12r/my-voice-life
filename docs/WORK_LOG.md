@@ -154,3 +154,11 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 - Owner tests on a computer, not a phone. `docs/PHONE_TEST_CHECKLIST.md` was replaced by `docs/DESKTOP_TEST_CHECKLIST.md`: 21 steps covering the sidebar layout, narrow window, 200% zoom, data persistence (F5 and reopening), keyboard (Tab/Esc), language, pricing and legal pages, microphone allow/block via the address bar, and sign-out errors.
 - The real voice-test checklist (`docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`) was adapted for desktop browsers: DevTools Offline replaces airplane mode; the address-bar permission replaces phone settings. It now states that mocks do not prove the OpenAI integration: only the real tests 2, 3, 5, 6, 8 and 14 do.
 - Real phones remain untested and are listed as such. Nothing deployed.
+
+## 2026-11-21 — Free/Plus/Pro subscriptions + Bring Your Own AI (built and tested offline; nothing deployed)
+- Owner decisions: pure BYOAI (no AI credits in any plan); key storage built now (OpenAI only); Pro = bigger limits only; Free keeps reminders/events with caps. Objections recorded in `docs/SUBSCRIPTIONS_BYOAI_REPORT.md`.
+- Migration 6 (local + tests only): plans free/plus/pro, configurable caps (triggers), 7-day payment grace, webhook apply v2, BYOAI key storage in Supabase Vault, BYOAI usage and rate limits, `byoai_mode` (default admins_only). Rollback + pre-flight (live, read-only: 0 user rows would change).
+- Functions: billing (checkout per plan, change_plan, invoices), stripe-webhook (plan from the price allow-list), new ai-connections, process-voice BYOAI routing.
+- Frontend: Pricing (3 plans + "AI billed separately" notice), new Billing page, "Your AI provider" card, Capture states, plan-limit messages.
+- Tests: all DB suites, 100 function tests, 167 unit tests, 8 mocked browser scenarios at 4 widths. **No real Stripe test-mode run and no real OpenAI run yet** (no account / key).
+- Docs: `STRIPE_SETUP.md` rewritten, new `BYOAI_SECURITY.md`, legal drafts updated, report `SUBSCRIPTIONS_BYOAI_REPORT.md`.

@@ -47,6 +47,8 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Multilingual: language registry, interface vs spoken languages (up to 3), mixed-language hints | ✅ code / ⬜ quality | registry + DB tests; **no language verified for voice yet** (needs native-speaker recordings) |
 | Google sign-in | 🔴 not working live | cause proven from auth logs: provider disabled in Supabase. Button now hidden while disabled; with provider on, the redirect and the cancel/error paths are browser-tested with mocks. **Needs owner: Google Cloud client + Supabase provider; not fixed until a real Google login succeeds** (docs/GOOGLE_OAUTH_SETUP.md) |
 | Privacy policy and terms pages (`/privacy`, `/terms`) | 🟡 draft | factual content checked against the code; linked from landing, register, pricing and settings; **identity, contact, legal basis, refunds, VAT and governing law left for the owner + legal review** |
+| Free/Plus/Pro plans, caps, payment grace, upgrade/downgrade, invoices (Stripe test mode) | 🟡 | DB + function + mocked browser tests (simulated Stripe); **migration 6 not applied, functions not deployed, no real test-mode run** (docs/STRIPE_SETUP.md) |
+| Bring Your Own AI (user's own OpenAI key in Vault) | 🟡 | DB (Vault access, isolation, deletion, races) + function tests (fakes); **not deployed; no real key tested**; byoai_mode admins_only (docs/BYOAI_SECURITY.md) |
 | Note translation | ⬜ | designed (original kept, translation stored beside it, counted as an AI capture); not built |
 | Admin dashboard (usage, controls, limits, finance with labels, expenses) | 🟡 | render-tested with mocked data under the real CSP; needs a live DB |
 | Allowance display + refusal messages in the app | 🟡 | render-tested with mocked data |
