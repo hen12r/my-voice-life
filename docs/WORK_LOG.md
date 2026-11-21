@@ -149,3 +149,8 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
   - no migration needed;
   - the frontend already handles `ai_not_configured`.
 - Checklist: `docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`.
+
+## 2026-11-21 — testing checklists adapted to desktop
+- Owner tests on a computer, not a phone. `docs/PHONE_TEST_CHECKLIST.md` was replaced by `docs/DESKTOP_TEST_CHECKLIST.md`: 21 steps covering the sidebar layout, narrow window, 200% zoom, data persistence (F5 and reopening), keyboard (Tab/Esc), language, pricing and legal pages, microphone allow/block via the address bar, and sign-out errors.
+- The real voice-test checklist (`docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`) was adapted for desktop browsers: DevTools Offline replaces airplane mode; the address-bar permission replaces phone settings. It now states that mocks do not prove the OpenAI integration: only the real tests 2, 3, 5, 6, 8 and 14 do.
+- Real phones remain untested and are listed as such. Nothing deployed.

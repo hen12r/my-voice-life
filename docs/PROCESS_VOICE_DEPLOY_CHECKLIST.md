@@ -84,8 +84,11 @@ Goal: replace `process-voice` v2 with the code at branch `claude/stripe-billing`
 - touch Vercel production or `main`;
 - public launch.
 
-## Real voice-test checklist (after deploy; owner on phone, Claude verifies read-only)
-**Who:** the owner, signed in as the hen… account (the only tester).
+## Real voice-test checklist (after deploy; owner on a laptop/desktop browser, Claude verifies read-only)
+**Who:** the owner, signed in as the hen… account (the only tester), on a computer: Chrome or Edge first.
+**Microphone:** the built-in laptop mic is fine. A headset gives cleaner audio. Close other apps that use the mic (Zoom, Teams, Discord), because they can block it.
+
+> **This is the real OpenAI test.** Passing code and mock tests does NOT prove the integration works. Voice counts as working only when tests 2, 3, 5, 6, 8 and 14 pass with real recordings and real OpenAI calls.
 
 **Preconditions:**
 - the responsible adult has confirmed `OPENAI_API_KEY` is set in Supabase → Edge Functions → Secrets (name only; the value is never shared);
@@ -104,9 +107,9 @@ Goal: replace `process-voice` v2 with the code at branch `claude/stripe-billing`
 | 9 | **Usage limit display:** Settings / Capture | Allowance shows the captures used (e.g. 3/7 free, or tester limits) | Matches `mvl_my_usage()` for that user |
 | 10 | **Max length:** record past the plan's maximum (120 s on free) | Recording stops at the limit or the server refuses with a clear message; no charge beyond the limit | Reservation refused or audio seconds capped |
 | 11 | **Silence:** record 5 s of silence | "No speech detected"-type message; nothing to save | Reservation finished `failed`/`no_speech` |
-| 12 | **Mic denied:** block the microphone in browser settings, try to record | A clear permission message with how to re-allow | — |
-| 13 | **Network cut:** start uploading, then enable airplane mode | A clear error; no half-saved items; retry possible | No orphan `reserved` row older than 15 min (expires by design) |
-| 14 | **Secret protection** | — | Logs for the test window contain no `sk-`, no `Bearer`, no JWT (search `function_edge_logs` for those patterns, reporting counts only); the browser network tab shows no key in any response |
+| 12 | **Mic denied:** padlock icon left of the address bar → Microphone → Block, reload, try to record (set it back to Allow afterwards) | A clear permission message with how to re-allow | — |
+| 13 | **Network cut:** DevTools (F12) → Network tab → set throttling to **Offline**, then stop a recording so it uploads (set back to No throttling afterwards) | A clear error; no half-saved items; retry possible | No orphan `reserved` row older than 15 min (expires by design) |
+| 14 | **Secret protection** | — | Logs for the test window contain no `sk-`, no `Bearer`, no JWT (search `function_edge_logs` for those patterns, reporting counts only); the DevTools Network tab (F12) shows no key in any response from `process-voice` |
 | 15 | **Non-tester refusal** (optional, needs a second account) | "AI is not available for your account yet"-type message | Reservation refused with `admins_only`; no OpenAI call |
 
 **Pass criteria:** tests 2, 3, 5, 6, 8 and 14 must pass before inviting any beta user to use voice. Any ❌ → Claude diagnoses from logs and DB (read-only) and proposes a fix; nothing changes without approval.

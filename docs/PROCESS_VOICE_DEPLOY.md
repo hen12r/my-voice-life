@@ -55,7 +55,7 @@ Do this if anything above fails, or if voice behaves worse than before.
 Optional: compare the bundle sha. Supabase may produce a different `ezbr_sha256` for identical source, so the file contents are what count.
 
 ## 5. Real voice test (after deploy, and once the adult has saved `OPENAI_API_KEY`)
-Use the tester account on `https://my-voice-life-git-claude-stripe-billing-henry7.vercel.app`, on a phone. Real OpenAI calls cost about **$0.005 per minute** of audio. The app's own limits are $2/day and $20/month.
+Use the tester account on `https://my-voice-life-git-claude-stripe-billing-henry7.vercel.app`, on a laptop/desktop browser (Chrome or Edge first; see `docs/PROCESS_VOICE_DEPLOY_CHECKLIST.md`). Real OpenAI calls cost about **$0.005 per minute** of audio. The app's own limits are $2/day and $20/month.
 
 **A. Transcription and extraction**
 - [ ] Record about 10 s in English: "Tomorrow at 10 I need to call my school, and buy a notebook." → transcript matches. Cards: a reminder or task for tomorrow at 10:00 *and* a task to buy a notebook.
