@@ -38,7 +38,7 @@ Deno.serve(createBillingHandler({
       if (error) throw new Error(error.message);
     },
     async planLimits() {
-      const { data, error } = await admin.from('mvl_plan_limits').select('plan, max_active_reminders, max_upcoming_events, max_ai_connections, byoai_captures_per_hour, byoai_captures_per_day, byoai_max_capture_seconds');
+      const { data, error } = await admin.from('mvl_plan_limits').select('plan, ai_captures_per_month, audio_minutes_per_month, max_capture_seconds, max_active_reminders, max_upcoming_events, max_ai_connections, byoai_captures_per_hour, byoai_captures_per_day, byoai_max_capture_seconds');
       if (error) throw new Error(error.message);
       return (data ?? []) as PlanLimitsRow[];
     },

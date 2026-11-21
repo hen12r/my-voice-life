@@ -1,15 +1,16 @@
 // POST /functions/v1/billing — plans, Stripe Checkout, plan changes, Customer Portal, invoices.
-//   { "action": "prices" }                         public: Plus/Pro monthly prices read from Stripe + plan limits
-//   { "action": "checkout", "plan": "plus"|"pro" } → { url } of a Stripe Checkout page (new subscribers)
-//   { "action": "change_plan", "plan": "plus"|"pro" } → { url } of a Stripe portal page confirming the switch
+//   { "action": "prices" }                         public: Plus/Pro monthly + yearly prices read from Stripe + plan limits
+//   { "action": "checkout", "plan": "plus"|"pro", "interval"?: "month"|"year" } → { url } of Stripe Checkout (new subscribers)
+//   { "action": "change_plan", "plan": "plus"|"pro", "interval"?: "month"|"year" } → { url } of Stripe's confirm page
+//     (upgrade, downgrade, or monthly ↔ yearly on the same plan)
 //   { "action": "portal" }                          → { url } of the Customer Portal (card, cancel, invoices)
 //   { "action": "invoices" }                        → the signed-in user's last 12 invoices (Stripe-hosted links only)
-// The browser sends at most a plan NAME. It never sends a price id, an amount, a customer id or a
+// The browser sends at most a plan NAME and an interval. It never sends a price id, an amount, a customer id or a
 // redirect URL: prices come from the server's allow-list, the customer from the database, the URLs
 // from an allow-listed Origin. Nothing here grants a plan — only the verified webhook does that.
 import { corsHeaders, fail, json } from '../_shared/http.ts';
 import { isOriginAllowed } from '../_shared/cors.ts';
-import { isPaidPlan, PAID_PLANS, type PaidPlan, type PriceConfig, type StripeClient, StripeApiError } from '../_shared/stripe.ts';
+import { type BillingInterval, INTERVALS, isInterval, isPaidPlan, PAID_PLANS, type PaidPlan, type PriceConfig, type StripeClient, StripeApiError } from '../_shared/stripe.ts';
 
 export interface SubscriptionRow {
   plan: string;
@@ -20,6 +21,10 @@ export interface SubscriptionRow {
 }
 export interface PlanLimitsRow {
   plan: string;
+  // Included AI allowance, paid by the project (hybrid model)
+  ai_captures_per_month: number;
+  audio_minutes_per_month: number;
+  max_capture_seconds: number;
   max_active_reminders: number | null;
   max_upcoming_events: number | null;
   max_ai_connections: number;
@@ -45,7 +50,7 @@ export interface BillingDeps {
   now?: () => number;
 }
 
-interface DisplayPrice { plan: PaidPlan; interval: 'month'; amount: number; currency: string }
+interface DisplayPrice { plan: PaidPlan; interval: BillingInterval; amount: number; currency: string }
 export interface InvoiceSummary {
   id: string; number: string | null; created: string; amount: number; currency: string; status: string | null; url: string | null;
 }
@@ -75,20 +80,20 @@ export function createBillingHandler(deps: BillingDeps) {
     if (!deps.stripe) return [];
     if (priceCache && now() - priceCache.at < PRICE_CACHE_MS) return priceCache.prices;
     const out: DisplayPrice[] = [];
-    for (const plan of PAID_PLANS) {
-      const id = deps.prices[plan];
+    for (const plan of PAID_PLANS) for (const interval of INTERVALS) {
+      const id = deps.prices[plan][interval];
       if (!id) continue;
       const p = await deps.stripe.get(`/prices/${id}`) as {
         active?: boolean; type?: string; unit_amount?: number | null; currency?: string;
         recurring?: { interval?: string; interval_count?: number } | null;
       };
-      // Show a price only if Stripe confirms it is what the slot claims: active, recurring, monthly.
-      if (p.active !== true || p.type !== 'recurring' || p.recurring?.interval !== 'month' || (p.recurring?.interval_count ?? 1) !== 1
+      // Show a price only if Stripe confirms it is what the slot claims: active, recurring, this interval.
+      if (p.active !== true || p.type !== 'recurring' || p.recurring?.interval !== interval || (p.recurring?.interval_count ?? 1) !== 1
         || typeof p.unit_amount !== 'number' || typeof p.currency !== 'string') {
-        console.error(`billing: configured ${plan} price is not an active monthly recurring price`);
+        console.error(`billing: configured ${plan} ${interval}ly price is not an active ${interval}ly recurring price`);
         continue;
       }
-      out.push({ plan, interval: 'month', amount: p.unit_amount, currency: p.currency.toUpperCase() });
+      out.push({ plan, interval, amount: p.unit_amount, currency: p.currency.toUpperCase() });
     }
     priceCache = { at: now(), prices: out };
     return out;
@@ -97,7 +102,7 @@ export function createBillingHandler(deps: BillingDeps) {
   return async function handle(req: Request): Promise<Response> {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
     if (req.method !== 'POST') return fail(req, 405, 'method_not_allowed', 'POST only');
-    const body = await req.json().catch(() => null) as { action?: unknown; plan?: unknown } | null;
+    const body = await req.json().catch(() => null) as { action?: unknown; plan?: unknown; interval?: unknown } | null;
     const action = body?.action;
 
     try {
@@ -109,6 +114,7 @@ export function createBillingHandler(deps: BillingDeps) {
           test_mode: deps.mode === 'test',
           prices,
           limits: Object.fromEntries(limits.map((l) => [l.plan, {
+            ai_captures_per_month: l.ai_captures_per_month, audio_minutes_per_month: l.audio_minutes_per_month, max_capture_seconds: l.max_capture_seconds,
             max_active_reminders: l.max_active_reminders, max_upcoming_events: l.max_upcoming_events,
             max_ai_connections: l.max_ai_connections, byoai_captures_per_hour: l.byoai_captures_per_hour,
             byoai_captures_per_day: l.byoai_captures_per_day, byoai_max_capture_seconds: l.byoai_max_capture_seconds,
@@ -154,10 +160,12 @@ export function createBillingHandler(deps: BillingDeps) {
         return json(req, 200, { url: session.url });
       }
 
-      // checkout / change_plan: the browser names a plan; the server picks its price.
+      // checkout / change_plan: the browser names a plan and an interval; the server picks the price.
       const plan = body?.plan;
       if (!isPaidPlan(plan)) return fail(req, 400, 'invalid_plan', 'Choose Plus or Pro');
-      const priceId = deps.prices[plan];
+      const interval: unknown = body?.interval ?? 'month';
+      if (!isInterval(interval)) return fail(req, 400, 'invalid_plan', 'Choose monthly or yearly');
+      const priceId = deps.prices[plan][interval];
       if (!priceId) return fail(req, 400, 'invalid_plan', 'This plan is not available yet');
 
       if (action === 'change_plan') {
@@ -210,7 +218,7 @@ export function createBillingHandler(deps: BillingDeps) {
         cancel_url: `${origin}/pricing?checkout=cancelled`,
         subscription_data: { metadata: { supabase_user_id: user.id } },
         metadata: { supabase_user_id: user.id },
-      }, `mvl-checkout-${user.id}-${plan}-${Math.floor(now() / 60_000)}`);
+      }, `mvl-checkout-${user.id}-${plan}-${interval}-${Math.floor(now() / 60_000)}`);
       return json(req, 200, { url: session.url });
     } catch (err) {
       if (err instanceof StripeApiError) {

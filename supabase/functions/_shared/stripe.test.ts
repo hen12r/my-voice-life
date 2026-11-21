@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  billingModeAllowed, checkoutUserFromEvent, createStripeClient, formEncode, isConfiguredPrice, isPaidPlan, parseEvent, parsePriceConfig, planForPrice,
+  billingModeAllowed, checkoutUserFromEvent, createStripeClient, formEncode, isConfiguredPrice, isInterval, isPaidPlan, parseEvent, parsePriceConfig, planForPrice,
   secretKeyMode, signStripePayloadForTest, StripeApiError, subscriptionIdFromEvent, subscriptionSnapshot, verifyStripeSignature,
 } from './stripe';
 
@@ -136,31 +136,34 @@ describe('subscription snapshots', () => {
 });
 
 describe('configuration', () => {
-  it('accepts only well-formed price ids', () => {
-    expect(parsePriceConfig(' price_Plus1 ', 'price_Pro1')).toEqual({ plus: 'price_Plus1', pro: 'price_Pro1' });
-    expect(parsePriceConfig('prod_X', undefined)).toEqual({ plus: null, pro: null });
+  const env = { plusMonth: ' price_PlusM ', plusYear: 'price_PlusY', proMonth: 'price_ProM', proYear: 'price_ProY' };
+  it('accepts only well-formed price ids, per plan and interval', () => {
+    expect(parsePriceConfig(env)).toEqual({ plus: { month: 'price_PlusM', year: 'price_PlusY' }, pro: { month: 'price_ProM', year: 'price_ProY' } });
+    expect(parsePriceConfig({ plusMonth: 'prod_X' })).toEqual({ plus: { month: null, year: null }, pro: { month: null, year: null } });
   });
-  it('refuses the same price for both plans (the plan would be ambiguous)', () => {
-    expect(parsePriceConfig('price_Same', 'price_Same')).toEqual({ plus: null, pro: null });
+  it('yearly prices are optional', () => {
+    expect(parsePriceConfig({ plusMonth: 'price_A', proMonth: 'price_B' })).toEqual({ plus: { month: 'price_A', year: null }, pro: { month: 'price_B', year: null } });
   });
-  it('allow-lists configured prices only', () => {
-    const cfg = { plus: 'price_P', pro: null };
-    expect(isConfiguredPrice(cfg, 'price_P')).toBe(true);
-    expect(isConfiguredPrice(cfg, 'price_Other')).toBe(false);
-    expect(isConfiguredPrice(cfg, null)).toBe(false);
+  it('refuses a price used in two slots (plan or interval would be ambiguous)', () => {
+    expect(parsePriceConfig({ plusMonth: 'price_Same', proMonth: 'price_Same', plusYear: 'price_Y' })).toEqual({ plus: { month: null, year: 'price_Y' }, pro: { month: null, year: null } });
+    expect(parsePriceConfig({ plusMonth: 'price_Same', plusYear: 'price_Same' }).plus).toEqual({ month: null, year: null });
   });
-  it('maps a price to its plan from the server allow-list only', () => {
-    const cfg = { plus: 'price_P', pro: 'price_Q' };
-    expect(planForPrice(cfg, 'price_P')).toBe('plus');
-    expect(planForPrice(cfg, 'price_Q')).toBe('pro');
+  it('maps a price to its plan and interval from the server allow-list only', () => {
+    const cfg = parsePriceConfig(env);
+    expect(planForPrice(cfg, 'price_PlusM')).toEqual({ plan: 'plus', interval: 'month' });
+    expect(planForPrice(cfg, 'price_PlusY')).toEqual({ plan: 'plus', interval: 'year' });
+    expect(planForPrice(cfg, 'price_ProY')).toEqual({ plan: 'pro', interval: 'year' });
     expect(planForPrice(cfg, 'price_Unknown')).toBeNull();
     expect(planForPrice(cfg, null)).toBeNull();
-    expect(planForPrice({ plus: null, pro: null }, 'price_P')).toBeNull();
+    expect(isConfiguredPrice(cfg, 'price_ProM')).toBe(true);
+    expect(isConfiguredPrice(cfg, 'price_Other')).toBe(false);
   });
-  it('recognises paid plan names only', () => {
+  it('recognises paid plan names and intervals only', () => {
     expect(isPaidPlan('plus')).toBe(true);
     expect(isPaidPlan('pro')).toBe(true);
     for (const v of ['free', 'premium', 'PRO', '', null, undefined, 1]) expect(isPaidPlan(v)).toBe(false);
+    expect(isInterval('month') && isInterval('year')).toBe(true);
+    for (const v of ['week', 'Month', '', null]) expect(isInterval(v)).toBe(false);
   });
 });
 

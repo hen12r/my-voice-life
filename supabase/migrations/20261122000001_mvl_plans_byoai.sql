@@ -1,8 +1,11 @@
 -- =====================================================================
 -- My Voice Life — Free / Plus / Pro plans + Bring Your Own AI (additive, re-runnable)
 -- ---------------------------------------------------------------------
--- Owner decision (2026-11-21): Freemium + BYOAI. No plan includes AI credits for users; voice
--- works with the user's OWN OpenAI key, billed to them by OpenAI. Plans differ by platform limits.
+-- Owner decisions (2026-11-21): Free / Plus / Pro, HYBRID AI. Every plan includes a monthly AI
+-- allowance paid by the project's key (Free 7 captures / 15 min, Plus 300 / 600, Pro 600 / 1200 —
+-- proposed, configurable), enforced by the existing mvl_reserve_ai_capture (budgets, kill switch,
+-- ai_mode). Users MAY also connect their own OpenAI key (BYOAI): then OpenAI bills them and the
+-- plan's daily BYOAI limits apply instead. Monthly and yearly prices.
 --
 --   1. Plans become free / plus / pro (was free / premium). Rows still on 'premium' become 'plus'
 --      (0 such rows on the live project when this was written; the pre-flight reports the count).
@@ -75,10 +78,17 @@ update public.mvl_plan_limits set max_ai_connections = 1,
   byoai_captures_per_hour = 40, byoai_captures_per_day = 200, byoai_max_capture_seconds = 600
 where plan = 'pro' and byoai_captures_per_day = 10;
 
+-- Included (platform-paid) AI allowance for Pro: higher than Plus. Proposed, configurable with
+-- mvl_admin_update_plan_limits. Applied only while Pro still has the values copied above.
+update public.mvl_plan_limits set ai_captures_per_month = 600, audio_minutes_per_month = 1200, max_capture_seconds = 600,
+  captures_per_hour = 60, captures_per_day = 120
+where plan = 'pro' and ai_captures_per_month = 300 and audio_minutes_per_month = 600;
+
 -- Finance estimates only (real prices come from Stripe). Proposed, not final: owner can change.
 delete from public.mvl_plan_prices where plan = 'premium';
 insert into public.mvl_plan_prices (plan, billing_interval, amount_cents, currency, active_from)
-values ('plus', 'month', 499, 'USD', '2026-01-01'), ('pro', 'month', 999, 'USD', '2026-01-01')
+values ('plus', 'month', 499, 'USD', '2026-01-01'), ('pro', 'month', 999, 'USD', '2026-01-01'),
+       ('plus', 'year', 4990, 'USD', '2026-01-01'), ('pro', 'year', 9990, 'USD', '2026-01-01')
 on conflict do nothing;
 delete from public.mvl_plan_limits where plan = 'premium';
 
@@ -518,30 +528,43 @@ declare
   s public.mvl_app_settings; f public.mvl_fee_schedules;
   pr record;
   n_users integer; n_plus integer; n_pro integer; n_mau integer;
-  price_plus numeric := 0; price_pro numeric := 0;
+  -- [plan][interval] list prices converted to EUR; counts per plan and interval.
+  price_plus_m numeric := 0; price_plus_y numeric := 0; price_pro_m numeric := 0; price_pro_y numeric := 0;
+  n_plus_m integer; n_plus_y integer; n_pro_m integer; n_pro_y integer;
   gross numeric; net numeric; fees numeric; ai_usd numeric; opex_eur numeric; opex_actual_eur numeric;
 begin
   if not public.mvl_is_admin() then raise exception 'not authorised' using errcode = '42501'; end if;
   select * into s from public.mvl_app_settings;
   select * into f from public.mvl_fee_schedules where provider = 'stripe' and card_region = s.fee_card_region
     and effective_from <= (m + interval '1 month')::date order by effective_from desc limit 1;
-  -- Monthly list prices, converted to EUR when stored in USD.
-  for pr in select distinct on (plan) plan, amount_cents, currency from public.mvl_plan_prices
-            where billing_interval = 'month' and active_from <= m + interval '1 month' and (active_to is null or active_to > m)
-            order by plan, active_from desc loop
-    if pr.plan = 'plus' then price_plus := pr.amount_cents / 100.0 * case pr.currency when 'USD' then s.fx_usd_to_eur else 1 end; end if;
-    if pr.plan = 'pro' then price_pro := pr.amount_cents / 100.0 * case pr.currency when 'USD' then s.fx_usd_to_eur else 1 end; end if;
+  for pr in select distinct on (plan, billing_interval) plan, billing_interval, amount_cents / 100.0
+              * case currency when 'USD' then s.fx_usd_to_eur else 1 end as eur
+            from public.mvl_plan_prices
+            where active_from <= m + interval '1 month' and (active_to is null or active_to > m)
+            order by plan, billing_interval, active_from desc loop
+    if pr.plan = 'plus' and pr.billing_interval = 'month' then price_plus_m := pr.eur; end if;
+    if pr.plan = 'plus' and pr.billing_interval = 'year' then price_plus_y := pr.eur; end if;
+    if pr.plan = 'pro' and pr.billing_interval = 'month' then price_pro_m := pr.eur; end if;
+    if pr.plan = 'pro' and pr.billing_interval = 'year' then price_pro_y := pr.eur; end if;
   end loop;
 
   select count(*) into n_users from auth.users;
-  select count(*) filter (where public.effective_plan(user_id) = 'plus'), count(*) filter (where public.effective_plan(user_id) = 'pro')
-    into n_plus, n_pro from public.subscriptions;
+  select count(*) filter (where p = 'plus' and coalesce(billing_interval, 'month') = 'month'),
+         count(*) filter (where p = 'plus' and billing_interval = 'year'),
+         count(*) filter (where p = 'pro' and coalesce(billing_interval, 'month') = 'month'),
+         count(*) filter (where p = 'pro' and billing_interval = 'year')
+    into n_plus_m, n_plus_y, n_pro_m, n_pro_y
+    from (select public.effective_plan(user_id) as p, billing_interval from public.subscriptions) x;
+  n_plus := n_plus_m + n_plus_y; n_pro := n_pro_m + n_pro_y;
   select count(distinct user_id) into n_mau from public.mvl_daily_activity where day >= m and day < (m + interval '1 month')::date;
 
-  gross := n_plus * price_plus + n_pro * price_pro;
+  -- Monthly-equivalent revenue at list prices (yearly / 12); fees per charge (yearly fee spread / 12).
+  gross := n_plus_m * price_plus_m + n_plus_y * price_plus_y / 12.0 + n_pro_m * price_pro_m + n_pro_y * price_pro_y / 12.0;
   net := case when s.prices_include_vat then gross / (1 + s.vat_rate) else gross end;
-  fees := n_plus * (price_plus * (coalesce(f.pct, 0) + coalesce(f.billing_pct, 0)) + coalesce(f.fixed_cents, 0) / 100.0)
-        + n_pro * (price_pro * (coalesce(f.pct, 0) + coalesce(f.billing_pct, 0)) + coalesce(f.fixed_cents, 0) / 100.0);
+  fees := n_plus_m * (price_plus_m * (coalesce(f.pct, 0) + coalesce(f.billing_pct, 0)) + coalesce(f.fixed_cents, 0) / 100.0)
+        + n_plus_y * (price_plus_y * (coalesce(f.pct, 0) + coalesce(f.billing_pct, 0)) + coalesce(f.fixed_cents, 0) / 100.0) / 12.0
+        + n_pro_m * (price_pro_m * (coalesce(f.pct, 0) + coalesce(f.billing_pct, 0)) + coalesce(f.fixed_cents, 0) / 100.0)
+        + n_pro_y * (price_pro_y * (coalesce(f.pct, 0) + coalesce(f.billing_pct, 0)) + coalesce(f.fixed_cents, 0) / 100.0) / 12.0;
   select coalesce(sum(est_cost_usd), 0) into ai_usd from public.mvl_ai_usage where occurred_at >= m and occurred_at < m + interval '1 month';
   select coalesce(sum(case currency when 'USD' then amount * s.fx_usd_to_eur else amount end), 0),
          coalesce(sum(case currency when 'USD' then amount * s.fx_usd_to_eur else amount end) filter (where kind = 'actual'), 0)
@@ -553,14 +576,15 @@ begin
     'currency', 'EUR',
     'payments_active', false,
     'labels', jsonb_build_object(
-      'revenue', 'PROJECTED at monthly list prices (converted to EUR); no live payments are active.',
+      'revenue', 'PROJECTED at list prices (converted to EUR), monthly-equivalent (yearly / 12); no live payments are active.',
       'net_revenue', 'ESTIMATE: revenue minus VAT using the configured VAT rate.',
       'stripe_fees', 'ESTIMATE from the configured fee schedule; Stripe is not active.',
-      'ai_costs', 'ESTIMATE of platform-paid AI only (staff testing). BYOAI usage is paid by users to their provider.',
+      'ai_costs', 'ESTIMATE of platform-paid AI (included allowances). BYOAI usage is paid by users to their provider.',
       'operating_expenses', 'Entered by admin; each row marked actual or estimate.',
       'contribution', 'ESTIMATE, NOT PROFIT: excludes income tax, refunds, chargebacks, salaries and your own time.'),
     'users', jsonb_build_object('total', n_users, 'monthly_active', n_mau,
-      'paid', n_plus + n_pro, 'plus', n_plus, 'pro', n_pro, 'free', n_users - n_plus - n_pro),
+      'paid', n_plus + n_pro, 'plus', n_plus, 'pro', n_pro, 'free', n_users - n_plus - n_pro,
+      'plus_monthly', n_plus_m, 'plus_yearly', n_plus_y, 'pro_monthly', n_pro_m, 'pro_yearly', n_pro_y),
     'revenue_gross_eur', round(gross, 2),
     'revenue_net_eur', round(net, 2),
     'stripe_fees_eur', round(fees, 2),
@@ -571,7 +595,8 @@ begin
     'estimated_contribution_eur', round(net - fees - ai_usd * s.fx_usd_to_eur - opex_eur, 2),
     'assumptions', jsonb_build_object('fx_usd_to_eur', s.fx_usd_to_eur, 'vat_rate', s.vat_rate,
       'prices_include_vat', s.prices_include_vat, 'fee_region', s.fee_card_region,
-      'price_plus_monthly_eur', round(price_plus, 2), 'price_pro_monthly_eur', round(price_pro, 2)),
+      'price_plus_monthly_eur', round(price_plus_m, 2), 'price_plus_yearly_eur', round(price_plus_y, 2),
+      'price_pro_monthly_eur', round(price_pro_m, 2), 'price_pro_yearly_eur', round(price_pro_y, 2)),
     'expenses', coalesce((select jsonb_agg(to_jsonb(e) - 'created_by' order by e.category, e.service)
                           from public.mvl_operating_expenses e where e.month = m), '[]'::jsonb)
   );

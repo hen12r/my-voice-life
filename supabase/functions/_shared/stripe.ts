@@ -194,26 +194,35 @@ export function subscriptionSnapshot(sub: Record<string, unknown>): Subscription
 export type PaidPlan = 'plus' | 'pro';
 export const PAID_PLANS: readonly PaidPlan[] = ['plus', 'pro'];
 
-/** One monthly recurring Stripe price per paid plan (env STRIPE_PRICE_PLUS_MONTHLY / STRIPE_PRICE_PRO_MONTHLY). */
-export interface PriceConfig { plus: string | null; pro: string | null }
+export type BillingInterval = 'month' | 'year';
+export const INTERVALS: readonly BillingInterval[] = ['month', 'year'];
 
-export function parsePriceConfig(plus: string | undefined, pro: string | undefined): PriceConfig {
+/** Recurring Stripe prices per paid plan and interval (env STRIPE_PRICE_{PLUS,PRO}_{MONTHLY,YEARLY}). */
+export interface PriceConfig { plus: { month: string | null; year: string | null }; pro: { month: string | null; year: string | null } }
+
+export function parsePriceConfig(env: { plusMonth?: string; plusYear?: string; proMonth?: string; proYear?: string }): PriceConfig {
   const ok = (v: string | undefined) => (v && /^price_[A-Za-z0-9]+$/.test(v.trim()) ? v.trim() : null);
-  const cfg = { plus: ok(plus), pro: ok(pro) };
-  // The same price for two plans would make the plan ambiguous: refuse both.
-  return cfg.plus && cfg.plus === cfg.pro ? { plus: null, pro: null } : cfg;
+  const cfg: PriceConfig = { plus: { month: ok(env.plusMonth), year: ok(env.plusYear) }, pro: { month: ok(env.proMonth), year: ok(env.proYear) } };
+  // The same price in two slots would make the plan or interval ambiguous: drop every duplicated id.
+  const ids = [cfg.plus.month, cfg.plus.year, cfg.pro.month, cfg.pro.year].filter(Boolean);
+  const dup = new Set(ids.filter((id, i) => ids.indexOf(id) !== i));
+  for (const plan of PAID_PLANS) for (const iv of INTERVALS) if (cfg[plan][iv] && dup.has(cfg[plan][iv])) cfg[plan][iv] = null;
+  return cfg;
 }
 
-/** The plan a Stripe price grants, decided ONLY from the server's allow-list. Unknown → null (grants nothing). */
-export function planForPrice(cfg: PriceConfig, priceId: string | null): PaidPlan | null {
+/** The plan and interval a Stripe price grants, decided ONLY from the server's allow-list. Unknown → null. */
+export function planForPrice(cfg: PriceConfig, priceId: string | null): { plan: PaidPlan; interval: BillingInterval } | null {
   if (!priceId) return null;
-  if (priceId === cfg.plus) return 'plus';
-  if (priceId === cfg.pro) return 'pro';
+  for (const plan of PAID_PLANS) for (const interval of INTERVALS) if (cfg[plan][interval] === priceId) return { plan, interval };
   return null;
 }
 
 export function isConfiguredPrice(cfg: PriceConfig, priceId: string | null): boolean {
   return planForPrice(cfg, priceId) !== null;
+}
+
+export function isInterval(v: unknown): v is BillingInterval {
+  return v === 'month' || v === 'year';
 }
 
 export function isPaidPlan(v: unknown): v is PaidPlan {

@@ -75,7 +75,7 @@ export function createWebhookHandler(deps: WebhookDeps) {
 
       // The plan comes ONLY from our price allow-list. Never GRANT access for a price we didn't
       // configure; removing access (canceled / incomplete_expired) is always applied.
-      const plan = planForPrice(deps.prices, snapshot.priceId);
+      const plan = planForPrice(deps.prices, snapshot.priceId)?.plan ?? null;
       if (GRANTING.includes(snapshot.status) && !plan) {
         console.warn(`stripe-webhook: ${event.id} ignored (unconfigured price)`);
         return reply(200, { received: true, ignored: 'unknown_price' });

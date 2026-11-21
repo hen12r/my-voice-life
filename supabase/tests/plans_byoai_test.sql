@@ -47,6 +47,11 @@ select pg_temp.expect((select max_active_reminders is null and max_upcoming_even
 select pg_temp.expect((select byoai_max_capture_seconds = 600 and byoai_captures_per_day = 200 from public.mvl_plan_limits where plan = 'pro'), 'pro: longer recordings and more captures per day');
 select pg_temp.expect((select count(*) = 0 from public.mvl_plan_limits where byoai_captures_per_day is null or byoai_captures_per_hour is null), 'no plan has unlimited BYOAI captures (server work is never unlimited)');
 select pg_temp.expect((select currency = 'USD' and amount_cents = 499 from public.mvl_plan_prices where plan = 'plus' and billing_interval = 'month'), 'proposed Plus price recorded as 4.99 USD (finance estimates only)');
+select pg_temp.expect((select count(*) = 4 from public.mvl_plan_prices where plan in ('plus', 'pro') and billing_interval in ('month', 'year')), 'monthly and yearly finance prices for Plus and Pro');
+-- Hybrid AI: every plan includes a platform-paid allowance (enforced by mvl_reserve_ai_capture).
+select pg_temp.expect((select ai_captures_per_month = 7 and audio_minutes_per_month = 15 from public.mvl_plan_limits where plan = 'free'), 'free includes 7 AI captures / 15 min per month');
+select pg_temp.expect((select ai_captures_per_month = 300 and audio_minutes_per_month = 600 from public.mvl_plan_limits where plan = 'plus'), 'plus includes 300 AI captures / 600 min per month');
+select pg_temp.expect((select ai_captures_per_month = 600 and audio_minutes_per_month = 1200 and max_capture_seconds = 600 from public.mvl_plan_limits where plan = 'pro'), 'pro includes 600 AI captures / 1200 min per month, 10-minute recordings');
 select pg_temp.expect_error_like($$insert into public.subscriptions (user_id, plan) values ('a6000000-0000-0000-0000-000000000009', 'premium')$$, '%', 'the retired premium plan is rejected by the database');
 select pg_temp.expect((select byoai_mode = 'admins_only' and billing_grace_days = 7 from public.mvl_app_settings), 'defaults: BYOAI admins_only, 7-day payment grace');
 

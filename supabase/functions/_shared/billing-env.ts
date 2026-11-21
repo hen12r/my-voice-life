@@ -3,8 +3,8 @@
 //   STRIPE_SECRET_KEY            sk_test_… (or rk_test_… restricted key). Live keys are refused
 //                                unless STRIPE_LIVE_MODE_APPROVED=true is also set.
 //   STRIPE_WEBHOOK_SECRET        whsec_… signing secret of the webhook endpoint
-//   STRIPE_PRICE_PLUS_MONTHLY    price_… (recurring, monthly) for Plus — not secret, but kept server-side
-//   STRIPE_PRICE_PRO_MONTHLY     price_… (recurring, monthly) for Pro
+//   STRIPE_PRICE_PLUS_MONTHLY / STRIPE_PRICE_PLUS_YEARLY   price_… for Plus (yearly optional) — not secret, kept server-side
+//   STRIPE_PRICE_PRO_MONTHLY  / STRIPE_PRICE_PRO_YEARLY    price_… for Pro (yearly optional)
 //   STRIPE_API_VERSION           optional override of the pinned API version
 import { billingModeAllowed, createStripeClient, parsePriceConfig, type PriceConfig, type StripeClient } from './stripe.ts';
 
@@ -12,7 +12,10 @@ export interface BillingEnv { stripe: StripeClient | undefined; mode: 'test' | '
 
 export function readBillingEnv(): BillingEnv {
   const key = Deno.env.get('STRIPE_SECRET_KEY');
-  const prices = parsePriceConfig(Deno.env.get('STRIPE_PRICE_PLUS_MONTHLY'), Deno.env.get('STRIPE_PRICE_PRO_MONTHLY'));
+  const prices = parsePriceConfig({
+    plusMonth: Deno.env.get('STRIPE_PRICE_PLUS_MONTHLY'), plusYear: Deno.env.get('STRIPE_PRICE_PLUS_YEARLY'),
+    proMonth: Deno.env.get('STRIPE_PRICE_PRO_MONTHLY'), proYear: Deno.env.get('STRIPE_PRICE_PRO_YEARLY'),
+  });
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || undefined;
   if (!key) return { stripe: undefined, mode: null, prices, webhookSecret };
   const allowed = billingModeAllowed(key, Deno.env.get('STRIPE_LIVE_MODE_APPROVED'));

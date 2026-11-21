@@ -37,14 +37,14 @@ begin
   return r;
 end $$;
 
--- Users: F free, X free, Y free, P plus (monthly), Q pro (monthly), A admin, T tester
+-- Users: F free, X free, Y free, P plus (monthly), Q pro (yearly), A admin, T tester
 insert into auth.users (id, email) values
   ('f0000000-0000-0000-0000-000000000001', 'f@test'), ('a0000000-0000-0000-0000-000000000007', 'x@test'),
   ('b0000000-0000-0000-0000-000000000008', 'y@test'), ('c0000000-0000-0000-0000-000000000003', 'p@test'),
   ('d0000000-0000-0000-0000-000000000004', 'q@test'), ('e0000000-0000-0000-0000-000000000005', 'admin@test'),
   ('e0000000-0000-0000-0000-000000000006', 'tester@test');
 update public.subscriptions set plan = 'plus', billing_interval = 'month' where user_id = 'c0000000-0000-0000-0000-000000000003';
-update public.subscriptions set plan = 'pro', billing_interval = 'month' where user_id = 'd0000000-0000-0000-0000-000000000004';
+update public.subscriptions set plan = 'pro', billing_interval = 'year' where user_id = 'd0000000-0000-0000-0000-000000000004';
 insert into public.mvl_staff values ('e0000000-0000-0000-0000-000000000005', 'admin'), ('e0000000-0000-0000-0000-000000000006', 'tester');
 
 -- ===================== Access control =====================
@@ -223,11 +223,12 @@ do $$ declare u jsonb; f jsonb; begin
   perform pg_temp.expect(u::text not like '%@test%' and f::text not like '%@test%', 'dashboards contain no emails');
   perform pg_temp.expect(jsonb_array_length(u->'top_users') > 0 and length(u->'top_users'->0->>'user') = 8, 'top users are pseudonymous 8-char hashes');
   perform pg_temp.expect((f->'users'->>'plus')::int = 1 and (f->'users'->>'pro')::int = 1 and (f->'users'->>'paid')::int = 2, 'finance counts plus and pro subscribers');
+  perform pg_temp.expect((f->'users'->>'plus_monthly')::int = 1 and (f->'users'->>'pro_yearly')::int = 1, 'finance splits monthly and yearly subscribers');
   perform pg_temp.expect((f->'users'->>'monthly_active')::int = 2, 'finance MAU from activity markers');
-  -- Prices are USD (fx 0.90): plus 4.99 → 4.491, pro 9.99 → 8.991; total 13.482 → 13.48
-  -- fees (4.491*0.022+0.25) + (8.991*0.022+0.25) = 0.348802 + 0.447802 = 0.7966 → 0.80
-  perform pg_temp.expect((f->>'revenue_gross_eur')::numeric = 13.48, 'projected revenue €13.48 (plus + pro, USD converted)');
-  perform pg_temp.expect((f->>'stripe_fees_eur')::numeric = 0.80, 'estimated Stripe fees €0.80');
+  -- Prices are USD (fx 0.90): plus monthly 4.99 → 4.491; pro yearly 99.90 → 89.91, /12 = 7.4925; total 11.9835 → 11.98
+  -- fees (4.491*0.022+0.25) + (89.91*0.022+0.25)/12 = 0.348802 + 0.185668 = 0.53447 → 0.53
+  perform pg_temp.expect((f->>'revenue_gross_eur')::numeric = 11.98, 'projected revenue €11.98 (plus monthly + pro yearly / 12, USD converted)');
+  perform pg_temp.expect((f->>'stripe_fees_eur')::numeric = 0.53, 'estimated Stripe fees €0.53 (yearly fee spread over 12 months)');
   perform pg_temp.expect((f->>'operating_expenses_eur')::numeric = 18.00, 'USD expenses converted at configured rate');
   perform pg_temp.expect(abs((f->>'estimated_contribution_eur')::numeric
       - ((f->>'revenue_net_eur')::numeric - (f->>'stripe_fees_eur')::numeric - (f->>'ai_costs_eur')::numeric - (f->>'operating_expenses_eur')::numeric)) <= 0.02,

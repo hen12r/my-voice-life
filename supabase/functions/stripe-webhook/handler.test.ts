@@ -14,7 +14,7 @@ function assertEq<T>(actual: T, expected: T, msg: string) {
 const SECRET = 'whsec_test_webhook_secret';
 const NOW = 1_800_000_000;
 const USER = '3c30d720-400f-4956-9c11-ed5dec974d1c';
-const PRICES = { plus: 'price_Monthly', pro: 'price_ProMonthly' };
+const PRICES = { plus: { month: 'price_Monthly', year: 'price_Yearly' }, pro: { month: 'price_ProMonthly', year: 'price_ProYearly' } };
 
 const subscription = (over: Record<string, unknown> = {}, periodEnd = NOW + 30 * 86400, price = 'price_Monthly') => ({
   id: 'sub_123', object: 'subscription', customer: 'cus_123', status: 'active', cancel_at_period_end: false, livemode: false,
@@ -205,6 +205,14 @@ Deno.test('upgrade to Pro and downgrade to Plus: the plan follows the re-fetched
   const down = setup({ sub: subscription({}, NOW + 30 * 86400, 'price_Monthly') });
   await post(down.handle, event('customer.subscription.updated', { id: 'sub_123' }));
   assertEq(down.store.calls[0].p_plan, 'plus', 'downgrade applied as Plus');
+});
+
+Deno.test('yearly price: the plan comes from the price, the interval from the subscription', async () => {
+  const sub = subscription({}, NOW + 365 * 86400, 'price_ProYearly');
+  (sub.items.data[0].price.recurring as { interval: string }).interval = 'year';
+  const { handle, store } = setup({ sub });
+  await post(handle, event('customer.subscription.updated', { id: 'sub_123' }));
+  assertEq([store.calls[0].p_plan, store.calls[0].p_interval], ['pro', 'year'], 'pro, yearly');
 });
 
 Deno.test('a forged plan in the event or metadata cannot change the plan', async () => {

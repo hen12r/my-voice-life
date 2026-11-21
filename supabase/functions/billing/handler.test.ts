@@ -16,16 +16,16 @@ function assert(cond: unknown, msg: string): asserts cond { if (!cond) throw new
 const ORIGIN = 'https://my-voice-life-git-claude-stripe-billing-henry7.vercel.app';
 const USER = { id: '3c30d720-400f-4956-9c11-ed5dec974d1c', email: 'owner@example.test' };
 const LIMIT = (plan: string, over: Record<string, unknown> = {}) => ({
-  plan, max_active_reminders: null, max_upcoming_events: null, max_ai_connections: 1,
+  plan, ai_captures_per_month: 300, audio_minutes_per_month: 600, max_capture_seconds: 300, max_active_reminders: null, max_upcoming_events: null, max_ai_connections: 1,
   byoai_captures_per_hour: 20, byoai_captures_per_day: 60, byoai_max_capture_seconds: 300, ...over,
 });
 const LIMITS = [
-  LIMIT('free', { max_active_reminders: 10, max_upcoming_events: 20, byoai_captures_per_hour: 5, byoai_captures_per_day: 10, byoai_max_capture_seconds: 120 }),
+  LIMIT('free', { ai_captures_per_month: 7, audio_minutes_per_month: 15, max_capture_seconds: 120, max_active_reminders: 10, max_upcoming_events: 20, byoai_captures_per_hour: 5, byoai_captures_per_day: 10, byoai_max_capture_seconds: 120 }),
   LIMIT('plus'),
-  LIMIT('pro', { byoai_captures_per_hour: 40, byoai_captures_per_day: 200, byoai_max_capture_seconds: 600 }),
+  LIMIT('pro', { ai_captures_per_month: 600, audio_minutes_per_month: 1200, max_capture_seconds: 600, byoai_captures_per_hour: 40, byoai_captures_per_day: 200, byoai_max_capture_seconds: 600 }),
 ];
-const PRICE_OBJ = (id: string, amount: number, over: Record<string, unknown> = {}) =>
-  ({ id, active: true, type: 'recurring', unit_amount: amount, currency: 'usd', recurring: { interval: 'month', interval_count: 1 }, ...over });
+const PRICE_OBJ = (id: string, amount: number, over: Record<string, unknown> = {}, interval = 'month') =>
+  ({ id, active: true, type: 'recurring', unit_amount: amount, currency: 'usd', recurring: { interval, interval_count: 1 }, ...over });
 const LIVE_ROW = (over: Partial<SubscriptionRow> = {}): SubscriptionRow =>
   ({ plan: 'plus', status: 'active', current_period_end: '2026-12-20T00:00:00Z', stripe_customer_id: 'cus_Mine', stripe_subscription_id: 'sub_Mine', ...over });
 const SUB_OBJ = (price = 'price_Plus', over: Record<string, unknown> = {}) =>
@@ -35,7 +35,7 @@ interface Call { method: string; path: string; params?: Record<string, unknown>;
 
 function setup(opts: {
   row?: SubscriptionRow | null; user?: typeof USER | null; noStripe?: boolean; stripeFails?: boolean;
-  prices?: Record<string, unknown>; sub?: Record<string, unknown>; invoices?: Record<string, unknown>[]; noPro?: boolean;
+  prices?: Record<string, unknown>; sub?: Record<string, unknown>; invoices?: Record<string, unknown>[]; noPro?: boolean; noYearly?: boolean;
 } = {}) {
   const calls: Call[] = [];
   const links: [string, string][] = [];
@@ -44,6 +44,8 @@ function setup(opts: {
       calls.push({ method: 'GET', path });
       if (path === '/prices/price_Plus') return Promise.resolve(opts.prices?.plus as Record<string, unknown> ?? PRICE_OBJ('price_Plus', 499));
       if (path === '/prices/price_Pro') return Promise.resolve(opts.prices?.pro as Record<string, unknown> ?? PRICE_OBJ('price_Pro', 999));
+      if (path === '/prices/price_PlusY') return Promise.resolve(opts.prices?.plusY as Record<string, unknown> ?? PRICE_OBJ('price_PlusY', 4990, {}, 'year'));
+      if (path === '/prices/price_ProY') return Promise.resolve(opts.prices?.proY as Record<string, unknown> ?? PRICE_OBJ('price_ProY', 9990, {}, 'year'));
       if (path === '/subscriptions/sub_Mine') return Promise.resolve(opts.sub ?? SUB_OBJ());
       if (path.startsWith('/invoices?')) return Promise.resolve({ data: opts.invoices ?? [] });
       return Promise.reject(new Error(`unexpected GET ${path}`));
@@ -61,7 +63,10 @@ function setup(opts: {
   const deps: BillingDeps = {
     stripe: opts.noStripe ? undefined : stripe,
     mode: opts.noStripe ? null : 'test',
-    prices: { plus: 'price_Plus', pro: opts.noPro ? null : 'price_Pro' },
+    prices: {
+      plus: { month: 'price_Plus', year: opts.noYearly ? null : 'price_PlusY' },
+      pro: { month: opts.noPro ? null : 'price_Pro', year: opts.noPro || opts.noYearly ? null : 'price_ProY' },
+    },
     allowedOrigins: ['http://localhost:3000', 'https://my-voice-life-*-henry7.vercel.app'],
     getUser: () => Promise.resolve(opts.user === undefined ? USER : opts.user),
     store: {
@@ -91,17 +96,19 @@ Deno.test('prices: public; Plus and Pro monthly amounts read from Stripe; limits
   assertEq([r.body.configured, r.body.test_mode], [true, true], 'configured, test mode');
   assertEq(r.body.prices, [
     { plan: 'plus', interval: 'month', amount: 499, currency: 'USD' },
+    { plan: 'plus', interval: 'year', amount: 4990, currency: 'USD' },
     { plan: 'pro', interval: 'month', amount: 999, currency: 'USD' },
-  ], 'prices');
+    { plan: 'pro', interval: 'year', amount: 9990, currency: 'USD' },
+  ], 'monthly and yearly prices');
   assertEq(Object.keys(r.body.limits), ['free', 'plus', 'pro'], 'three plans');
   assertEq(r.body.limits.free.max_active_reminders, 10, 'free reminder cap');
   assertEq(r.body.limits.pro.byoai_max_capture_seconds, 600, 'pro recording length');
-  assert(!r.text.includes('ai_captures_per_month'), 'no included-AI allowance is advertised (BYOAI)');
+  assertEq([r.body.limits.free.ai_captures_per_month, r.body.limits.plus.audio_minutes_per_month, r.body.limits.pro.ai_captures_per_month], [7, 600, 600], 'included AI allowances (hybrid) come from the database');
 });
 
 Deno.test('prices: a misconfigured price (inactive, one-off, or yearly) is not shown', async () => {
   for (const bad of [{ active: false }, { type: 'one_time' }, { recurring: { interval: 'year', interval_count: 1 } }, { recurring: { interval: 'month', interval_count: 3 } }]) {
-    const { handle } = setup({ prices: { plus: PRICE_OBJ('price_Plus', 499, bad), pro: PRICE_OBJ('price_Pro', 999, bad) } });
+    const { handle } = setup({ noYearly: true, prices: { plus: PRICE_OBJ('price_Plus', 499, bad), pro: PRICE_OBJ('price_Pro', 999, bad) } });
     const r = await call(handle, { action: 'prices' });
     assertEq([r.body.prices, r.body.configured], [[], false], JSON.stringify(bad));
   }
@@ -109,14 +116,14 @@ Deno.test('prices: a misconfigured price (inactive, one-off, or yearly) is not s
 
 Deno.test('prices: Pro not configured → only Plus is offered', async () => {
   const r = await call(setup({ noPro: true }).handle, { action: 'prices' });
-  assertEq(r.body.prices.map((p: { plan: string }) => p.plan), ['plus'], 'plus only');
+  assertEq(r.body.prices.map((p: { plan: string; interval: string }) => `${p.plan}/${p.interval}`), ['plus/month', 'plus/year'], 'plus only');
 });
 
 Deno.test('prices: cached for 5 minutes (no Stripe call per page view)', async () => {
   const { handle, calls } = setup();
   await call(handle, { action: 'prices' });
   await call(handle, { action: 'prices' });
-  assertEq(calls.filter((c) => c.method === 'GET').length, 2, 'two price lookups total, not four');
+  assertEq(calls.filter((c) => c.method === 'GET').length, 4, 'four price lookups total (2 plans × 2 intervals), not eight');
 });
 
 Deno.test('prices: without Stripe, plans and limits still show, with no invented price', async () => {
@@ -147,6 +154,20 @@ Deno.test('checkout: new customer created once, linked to the signed-in user, se
   assertEq(cs.cancel_url, `${ORIGIN}/pricing?checkout=cancelled`, 'cancel URL from the allowed origin');
   assertEq(cs.subscription_data, { metadata: { supabase_user_id: USER.id } }, 'subscription metadata');
   assert(csCall.idem?.startsWith(`mvl-checkout-${USER.id}-pro-`), 'checkout session is idempotent (a double click opens one session)');
+});
+
+Deno.test('checkout: yearly interval uses the yearly price; a bad interval is refused', async () => {
+  const { handle, calls } = setup();
+  assertEq((await call(handle, { action: 'checkout', plan: 'plus', interval: 'year' })).status, 200, 'status');
+  assertEq(calls.find((c) => c.path === '/checkout/sessions')!.params!.line_items, [{ price: 'price_PlusY', quantity: 1 }], 'yearly Plus price');
+  assertEq((await call(setup().handle, { action: 'checkout', plan: 'plus', interval: 'week' })).body.error.code, 'invalid_plan', 'week refused');
+  assertEq((await call(setup({ noYearly: true }).handle, { action: 'checkout', plan: 'pro', interval: 'year' })).body.error.code, 'invalid_plan', 'yearly not configured');
+});
+
+Deno.test('change_plan: monthly → yearly on the same plan uses the yearly price', async () => {
+  const { handle, calls } = setup({ row: LIVE_ROW(), sub: SUB_OBJ('price_Plus') });
+  assertEq((await call(handle, { action: 'change_plan', plan: 'plus', interval: 'year' })).status, 200, 'status');
+  assertEq((calls[1].params!.flow_data as { subscription_update_confirm: { items: { price: string }[] } }).subscription_update_confirm.items[0].price, 'price_PlusY', 'yearly price on the same item');
 });
 
 Deno.test('checkout: a double click within the same minute reuses the same idempotency key', async () => {
