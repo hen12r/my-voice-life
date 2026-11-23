@@ -2,6 +2,11 @@
 
 > See also `docs/PROCESS_VOICE_DEPLOY.md` (written in parallel by another session). Both agree; this file adds the live compatibility checks.
 
+> **Update 23 Nov 2026:**
+> - The branch HEAD has moved on. HEAD's `process-voice` calls migration-6 functions that don't exist live, so the **deploy target stays `3d8824e`**.
+> - Pre-checks were re-run read-only at 19:23 UTC, and all pass: see `docs/VOICE_TEST_APPROVAL.md`.
+> - The preview frontend (HEAD) is compatible with `3d8824e`: the request to process-voice is unchanged, and Capture falls back to `ai_available`.
+
 ## Context
 The owner approved redeploying `process-voice`, `billing` and `delete-account`, then paused everything: **nothing more is deployed until the responsible adult who manages the Supabase project approves it.**
 
@@ -113,3 +118,14 @@ Goal: replace `process-voice` v2 with the code at branch `claude/stripe-billing`
 | 15 | **Non-tester refusal** (optional, needs a second account) | "AI is not available for your account yet"-type message | Reservation refused with `admins_only`; no OpenAI call |
 
 **Pass criteria:** tests 2, 3, 5, 6, 8 and 14 must pass before inviting any beta user to use voice. Any ❌ → Claude diagnoses from logs and DB (read-only) and proposes a fix; nothing changes without approval.
+
+## Short owner test (6 steps, about 10 minutes)
+On a computer first (Chrome or Edge), signed in with the owner's account. Then the iPhone (Safari / installed app).
+1. **Capture → record ~10 s:** "Remind me to call the school tomorrow at 9, and add a task to buy milk." → the transcript appears.
+2. **Check the cards:** a reminder for tomorrow at 09:00 and a "buy milk" task. Nothing invented.
+3. **Edit one card, reject another, save.** → only the accepted items are saved.
+4. **Reload the page** → the items are still there; Memory finds the transcript.
+5. Claude checks, read-only: the cost is recorded (a fraction of a cent), within the budget.
+6. Claude checks, read-only: no key, `Bearer` or JWT in the logs (counts only).
+
+Steps 1–4 ✅ plus checks 5–6 ✅ = voice works for real. Any ❌ → send a screenshot plus the Console errors (F12); Claude diagnoses read-only.
