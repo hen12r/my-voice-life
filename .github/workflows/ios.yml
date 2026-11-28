@@ -30,6 +30,19 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
+      - name: TestFlight settings check (prints present / missing only, never a value)
+        run: |
+          check() { if [ -n "$2" ]; then echo "  present: $1"; else echo "  MISSING: $1"; fi; }
+          echo "Repository VARIABLES (Settings → Secrets and variables → Actions → Variables tab):"
+          echo "  IOS_TESTFLIGHT_ENABLED = '${{ vars.IOS_TESTFLIGHT_ENABLED }}' (must be exactly: true)"
+          check APPLE_TEAM_ID "${{ vars.APPLE_TEAM_ID }}"
+          check IOS_BUNDLE_ID "${{ vars.IOS_BUNDLE_ID }}"
+          check VITE_SUPABASE_URL "${{ vars.VITE_SUPABASE_URL }}"
+          check VITE_SUPABASE_PUBLISHABLE_KEY "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}"
+          echo "Repository SECRETS (Secrets tab):"
+          check APP_STORE_CONNECT_KEY_ID "${{ secrets.APP_STORE_CONNECT_KEY_ID != '' && 'x' || '' }}"
+          check APP_STORE_CONNECT_ISSUER_ID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID != '' && 'x' || '' }}"
+          check APP_STORE_CONNECT_KEY_P8 "${{ secrets.APP_STORE_CONNECT_KEY_P8 != '' && 'x' || '' }}"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
