@@ -18,6 +18,7 @@ import Admin from './pages/Admin';
 import Pricing from './pages/Pricing';
 import BillingSuccess from './pages/BillingSuccess';
 import Billing from './pages/Billing';
+import Welcome from './pages/Welcome';
 import { PwaBanners } from './pwa/PwaBanners';
 import { PrivacyPolicy, TermsOfService } from './pages/Legal';
 import type { UiLanguage } from './lib/types';
@@ -92,6 +93,7 @@ export default function App() {
               <Route path="admin" element={<Admin />} />
               <Route path="billing" element={<Billing />} />
               <Route path="billing/success" element={<BillingSuccess />} />
+              <Route path="welcome" element={<Welcome />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

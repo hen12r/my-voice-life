@@ -8,6 +8,7 @@ import { planNameKey } from '../lib/plans';
 import { AiProviderCard } from '../components/AiProviderCard';
 import { InstallCard } from '../pwa/InstallCard';
 import { AppearanceCard } from '../components/AppearanceCard';
+import { setOnboarded } from '../lib/onboarding';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -198,6 +199,8 @@ export default function Settings() {
             onChange={(e) => { setSoundEnabled(e.target.checked); setSound(e.target.checked); if (e.target.checked) playCue('ready'); }} />
         </label>
       </Card>
+
+      <Button variant="ghost" className="w-full" icon={<Sparkles className="size-4" />} onClick={() => { setOnboarded(false); navigate('/app/welcome'); }}>{t('settings.replayIntro')}</Button>
 
       {/* Sign out is here so it is reachable on phones (the sidebar is desktop-only). */}
       <Button variant="secondary" className="w-full" icon={<LogOut className="size-4" />} onClick={async () => { await signOut(); navigate('/'); }}>{t('nav.signout')}</Button>

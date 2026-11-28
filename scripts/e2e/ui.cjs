@@ -65,7 +65,7 @@ const PAGES = ['/app', '/app/notes', '/app/tasks', '/app/schedule', '/app/captur
   const stopServer = () => { try { process.kill(-server.pid, 'SIGTERM'); } catch { /* already gone */ } };
   for (let i = 0; i < 40; i++) { try { await fetch(BASE); break; } catch { await sleep(300); } }
   if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
-  const browser = await chromium.launch(); const R = {}; const fails = [];
+  const browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] }); const R = {}; const fails = [];
   const check = (name, ok, detail) => { R[name] = ok ? 'ok' : `FAIL ${JSON.stringify(detail ?? '')}`; if (!ok) fails.push(name); };
   try {
     // 1. Dark mode: system dark → data-theme=dark on every page; real dark background; no overflow.
@@ -108,6 +108,57 @@ const PAGES = ['/app', '/app/notes', '/app/tasks', '/app/schedule', '/app/captur
       const s = await page.evaluate(() => [document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor]);
       check('1c light default', s[0] === 'light' && s[1] === 'rgb(246, 246, 250)', s);
       if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'light-1366_app.png'), fullPage: true });
+      await ctx.close();
+    }
+    // 2. Welcome flow.
+    {
+      // 2a. Empty account, first visit → introduction; mic test (fake device) stops at once; honest voice status; first note.
+      const ctx = await signedInContext(browser, { empty: true, onboarded: false, viewport: { width: 390, height: 844 } });
+      await ctx.grantPermissions(['microphone'], { origin: BASE });
+      const page = await ctx.newPage();
+      const errors = []; page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text().slice(0, 150)); });
+      await page.goto(BASE + '/app'); await page.waitForURL('**/app/welcome', { timeout: 5000 }).catch(() => {});
+      const landed = new URL(page.url()).pathname;
+      await page.getByRole('button', { name: 'Next' }).click();
+      await page.getByRole('button', { name: 'Test my microphone' }).click();
+      const micOk = await page.getByText('Your microphone works. Nothing was recorded.').waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+      if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'welcome-390-mic.png'), fullPage: true });
+      await page.getByRole('button', { name: 'Next' }).click();
+      const voiceOff = await page.getByText('Voice capture is not available on your account yet.', { exact: false }).isVisible();
+      await page.getByRole('button', { name: 'Next' }).click();
+      if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'welcome-390-last.png'), fullPage: true });
+      await page.getByRole('button', { name: 'Write my first note' }).click();
+      await page.waitForTimeout(600);
+      const after = { path: new URL(page.url()).pathname, dialog: await page.getByRole('dialog').isVisible().catch(() => false), flag: await page.evaluate(() => localStorage.getItem('mvl-onboarded')) };
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+      check('2a welcome flow (empty account)', landed === '/app/welcome' && micOk && voiceOff && after.path === '/app/notes' && after.dialog && after.flag === '1' && !overflow, { landed, micOk, voiceOff, after, overflow });
+      // Visiting /app again does not show it twice.
+      await page.goto(BASE + '/app'); await page.waitForTimeout(900);
+      check('2a shown only once', new URL(page.url()).pathname === '/app', page.url());
+      check('2a console errors', errors.length === 0, errors);
+      await ctx.close();
+    }
+    {
+      // 2b. Existing account with data → never shown; the flag is set quietly.
+      const ctx = await signedInContext(browser, { onboarded: false }); const page = await ctx.newPage();
+      await page.goto(BASE + '/app'); await page.waitForTimeout(1000);
+      const s = { path: new URL(page.url()).pathname, flag: await page.evaluate(() => localStorage.getItem('mvl-onboarded')) };
+      check('2b existing account skips intro', s.path === '/app' && s.flag === '1', s);
+      // 2c. Settings → "Show the introduction again" → welcome; Skip → back to /app.
+      await page.goto(BASE + '/app/settings'); await page.waitForTimeout(600);
+      await page.getByRole('button', { name: 'Show the introduction again' }).click();
+      const replay = new URL(page.url()).pathname;
+      await page.getByRole('button', { name: 'Skip' }).click(); await page.waitForTimeout(400);
+      check('2c replay + skip', replay === '/app/welcome' && new URL(page.url()).pathname === '/app', { replay, now: page.url() });
+      await ctx.close();
+    }
+    {
+      // 2d. Welcome in dark mode, desktop.
+      const ctx = await signedInContext(browser, { empty: true, onboarded: false, colorScheme: 'dark' }); const page = await ctx.newPage();
+      await page.goto(BASE + '/app/welcome'); await page.waitForTimeout(600);
+      const s = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, overflow: document.documentElement.scrollWidth > innerWidth + 1 }));
+      if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'welcome-1366-dark.png') });
+      check('2d welcome dark desktop', s.theme === 'dark' && !s.overflow, s);
       await ctx.close();
     }
   } finally {
