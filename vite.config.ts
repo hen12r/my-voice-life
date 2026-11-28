@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -26,8 +28,25 @@ function vercelHeaders(): Record<string, string> {
   return Object.fromEntries(rule.headers.map((h: { key: string; value: string }) => [h.key, h.value]));
 }
 
+// Stamps the service worker with a build id derived from the hashed asset names, so every deploy
+// that changes the app gets a new cache (old caches are deleted when the new worker activates).
+function swVersion(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'mvl-sw-version',
+    apply: 'build',
+    configResolved(c) { outDir = resolve(c.root, c.build.outDir); },
+    closeBundle() {
+      const sw = join(outDir, 'sw.js');
+      const assets = readdirSync(join(outDir, 'assets')).sort().join('|');
+      const build = createHash('sha256').update(assets).digest('hex').slice(0, 12);
+      writeFileSync(sw, readFileSync(sw, 'utf8').replace('__MVL_BUILD__', build));
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [secretGuard(mode), react(), tailwindcss()],
+  plugins: [secretGuard(mode), react(), tailwindcss(), swVersion()],
   server: { port: 3000, host: '0.0.0.0' },
   preview: { port: 4173, headers: vercelHeaders() },
   test: {

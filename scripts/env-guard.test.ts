@@ -33,3 +33,12 @@ describe('env guard', () => {
     expect(mask('short')).toBe('***');
   });
 });
+
+describe('Stripe secrets', () => {
+  it('treats Stripe secret, restricted and webhook keys as secrets', async () => {
+    const { looksSecret } = await import('./env-guard.mjs');
+    for (const v of ['sk_test_abc', 'sk_live_abc', 'rk_test_abc', 'rk_live_abc', 'whsec_abc']) expect(looksSecret(v)).toBe(true);
+    expect(looksSecret('pk_test_abc')).toBe(false); // publishable keys are public by design (and unused here)
+  });
+});
+

@@ -54,3 +54,25 @@ describe('interface language fallback (languages without a translation)', () => 
   });
 });
 
+
+describe('billing and account error messages', () => {
+  // Every code the billing and delete-account functions can return, read from their sources.
+  const read = (f: string) => readFileSync(new URL(`../../supabase/functions/${f}`, import.meta.url), 'utf8');
+  const codes = [...new Set([...(read('billing/handler.ts') + read('delete-account/handler.ts')).matchAll(/fail\(req, \d+, '([a-z_]+)'/g)].map((m) => m[1]))]
+    .filter((c) => c !== 'method_not_allowed');
+  it('finds the codes (sanity check of the extraction)', () => {
+    expect(codes).toEqual(expect.arrayContaining(['billing_not_configured', 'already_subscribed', 'origin_not_allowed', 'subscription_cancel_failed']));
+  });
+  it('has an English and a French message for every code', () => {
+    const missing = codes.filter((c) => {
+      const en = translate('en', `errors.${c}` as TranslationKey), fr = translate('fr', `errors.${c}` as TranslationKey);
+      return !en || !fr || en === fr;
+    });
+    expect(missing).toEqual([]);
+  });
+  it('maps browser push registration failures to a clear message', () => {
+    const t = (k: TranslationKey) => translate('en', k);
+    expect(errorMessage(t, new Error('Registration failed - permission denied'))).toBe(translate('en', 'errors.push_register_failed'));
+    expect(errorMessage(t, new Error('PUSH_LIMIT_DEVICES: notifications are on for 10 devices already'))).toBe(translate('en', 'errors.push_limit_devices'));
+  });
+});

@@ -5,9 +5,9 @@ export function cx(...c: (string | false | null | undefined)[]) { return c.filte
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 const variants: Record<Variant, string> = {
-  primary: 'bg-navy-900 text-white hover:bg-navy-800 shadow-sm',
-  secondary: 'bg-white text-ink border border-line hover:bg-canvas',
-  ghost: 'text-muted hover:text-ink hover:bg-black/5',
+  primary: 'bg-navy-900 text-white hover:bg-navy-800 shadow-sm dark:bg-accent-600 dark:hover:bg-accent-500',
+  secondary: 'bg-surface text-ink border border-line hover:bg-canvas',
+  ghost: 'text-muted hover:text-ink hover:bg-black/5 dark:hover:bg-white/5',
   danger: 'bg-red-600 text-white hover:bg-red-700',
 };
 
@@ -24,7 +24,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   );
 });
 
-const field = 'w-full rounded-xl border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-100 disabled:bg-canvas';
+const field = 'w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted/70 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-100 disabled:bg-canvas';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...p }, ref) {
   return <input ref={ref} className={cx(field, 'h-10', className)} {...p} />;
@@ -72,7 +72,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
 }
 
 export function Alert({ kind = 'error', children }: { kind?: 'error' | 'success' | 'info'; children: ReactNode }) {
-  const styles = { error: 'bg-red-50 text-red-800 border-red-200', success: 'bg-emerald-50 text-emerald-800 border-emerald-200', info: 'bg-accent-50 text-navy-800 border-accent-100' }[kind];
+  const styles = { error: 'bg-red-50 text-red-800 border-red-200', success: 'bg-emerald-50 text-emerald-800 border-emerald-200', info: 'bg-accent-50 text-navy-800 border-accent-100 dark:text-ink' }[kind];
   const Icon = kind === 'success' ? CheckCircle2 : AlertCircle;
   return (
     <div role={kind === 'error' ? 'alert' : 'status'} className={cx('flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm', styles)}>
@@ -106,7 +106,7 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-navy-950/40 p-0 sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}
       onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={title} className="animate-fade-up max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl">
+      <div role="dialog" aria-modal="true" aria-label={title} className="animate-fade-up max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-xl sm:max-w-lg sm:rounded-2xl">
         <h2 className="mb-4 text-base font-semibold">{title}</h2>
         {children}
       </div>

@@ -6,3 +6,22 @@ verify_jwt = true
 
 [functions.delete-account]
 verify_jwt = true
+
+# Billing: the public "prices" action must work without a session; "checkout"/"portal" check the
+# user's JWT inside the function. Stripe can't send a Supabase JWT: the webhook is authenticated
+# by its Stripe-Signature instead (verified in code against STRIPE_WEBHOOK_SECRET).
+[functions.billing]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.ai-connections]
+verify_jwt = true
+
+[functions.push]
+verify_jwt = true
+
+# Called by the database scheduler (pg_cron + pg_net) with the CRON_SECRET header, not by browsers.
+[functions.send-reminders]
+verify_jwt = false

@@ -39,10 +39,42 @@ export interface CalendarEvent {
   all_day: boolean; category_id: string | null; created_at: string;
 }
 
-export interface Subscription { plan: 'free' | 'premium'; status: string; billing_interval: string | null; current_period_end: string | null }
-/** From mvl_my_usage(): the caller's own AI allowance (counted on the server). */
+/** Plans (server-side source of truth: subscriptions.plan + effective_plan()). */
+export type Plan = 'free' | 'plus' | 'pro';
+export type PaidPlan = 'plus' | 'pro';
+export type BillingInterval = 'month' | 'year';
+
+export interface Subscription {
+  plan: Plan; status: string; billing_interval: string | null; current_period_end: string | null;
+  cancel_at_period_end: boolean; has_billing_account: boolean;
+}
+/** Per-plan limits shown on Pricing (from mvl_plan_limits; null = no cap). */
+export interface PlanCaps {
+  // Included AI allowance, paid by My Voice Life (hybrid model)
+  ai_captures_per_month: number;
+  audio_minutes_per_month: number;
+  max_capture_seconds: number;
+  max_active_reminders: number | null;
+  max_upcoming_events: number | null;
+  max_ai_connections: number;
+  byoai_captures_per_hour: number;
+  byoai_captures_per_day: number;
+  byoai_max_capture_seconds: number;
+}
+/** From the billing Edge Function: prices are read from Stripe, limits from mvl_plan_limits. */
+export interface BillingInfo {
+  configured: boolean;
+  test_mode: boolean;
+  prices: { plan: PaidPlan; interval: BillingInterval; amount: number; currency: string }[];
+  limits: Partial<Record<Plan, PlanCaps>>;
+}
+export interface Invoice {
+  id: string; number: string | null; created: string; amount: number; currency: string; status: string | null; url: string | null;
+}
+export interface AiConnection { provider: 'openai'; hint: string; status: 'active' | 'invalid'; validated_at: string | null }
+/** From mvl_my_usage(): the caller's own plan, limits and usage (counted on the server). */
 export interface MyUsage {
-  plan: 'free' | 'premium';
+  plan: Plan;
   is_staff: boolean;
   is_admin: boolean;
   ai_mode: 'on' | 'admins_only' | 'off';
@@ -54,10 +86,23 @@ export interface MyUsage {
   minutes_limit: number;
   max_capture_seconds: number;
   resets_at: string;
+  // Bring Your Own AI (absent before migration 6 is applied)
+  byoai_mode?: 'off' | 'admins_only' | 'everyone';
+  byoai_allowed?: boolean;
+  byoai_connected?: boolean;
+  byoai_key_invalid?: boolean;
+  byoai_used_today?: number;
+  byoai_captures_per_day?: number;
+  byoai_max_capture_seconds?: number;
+  max_active_reminders?: number | null;
+  active_reminders?: number;
+  max_upcoming_events?: number | null;
+  upcoming_events?: number;
+  max_ai_connections?: number;
 }
 
 export interface PlanLimits {
-  plan: 'free' | 'premium';
+  plan: Plan;
   ai_captures_per_month: number;
   audio_minutes_per_month: number;
   max_capture_seconds: number;
@@ -110,7 +155,7 @@ export interface AdminFinanceSummary {
   currency: 'EUR';
   payments_active: boolean;
   labels: Record<'revenue' | 'net_revenue' | 'stripe_fees' | 'ai_costs' | 'operating_expenses' | 'contribution', string>;
-  users: { total: number; monthly_active: number; premium: number; premium_monthly: number; premium_annual: number; free: number };
+  users: { total: number; monthly_active: number; paid: number; plus: number; pro: number; free: number; plus_monthly?: number; plus_yearly?: number; pro_monthly?: number; pro_yearly?: number };
   revenue_gross_eur: number;
   revenue_net_eur: number;
   stripe_fees_eur: number;

@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
+import { isNativeApp } from '../native/platform';
+import { syncNativeReminders } from '../native/reminders';
 import { AlertTriangle, Bell, CalendarDays, Check, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { createEvent, createReminder, deleteEvent, deleteReminder, listEvents, listReminders, updateEvent, updateReminder } from '../lib/api';
 import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
@@ -22,6 +24,9 @@ export default function Schedule() {
   const [editReminder, setEditReminder] = useState<Partial<Reminder> | null>(params.get('new') === 'reminder' ? {} : null);
   const [editEvent, setEditEvent] = useState<Partial<CalendarEvent> | null>(params.get('new') === 'event' ? {} : null);
   const [showDone, setShowDone] = useState(false);
+
+  // iOS app: whenever the list changes (load, save, complete, delete), rebuild the device's alerts.
+  useEffect(() => { if (reminders && isNativeApp()) void syncNativeReminders(reminders); }, [reminders]);
 
   useEffect(() => {
     Promise.all([listReminders(), listEvents()]).then(([r, e]) => { setReminders(r); setEvents(e); }).catch((e) => setError(errorMessage(t, e)));

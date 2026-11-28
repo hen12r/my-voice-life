@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { AlertTriangle, Bell, CalendarDays, CheckCircle2, Circle, FileText, Keyboard, ListPlus, Mic, Search, Target } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { errorMessage, useI18n } from '../lib/i18n';
@@ -7,6 +7,7 @@ import { listEvents, listNotes, listReminders, listTasks, rankPriorities, update
 import type { CalendarEvent, Note, Reminder, Task } from '../lib/types';
 import { browserTimeZone, dateInZone } from '../lib/dates';
 import { formatDateTime, formatDay } from '../lib/format';
+import { isOnboarded, setOnboarded, shouldOnboard } from '../lib/onboarding';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Spinner } from '../components/ui';
 
 export default function Dashboard() {
@@ -15,14 +16,20 @@ export default function Dashboard() {
   const tz = profile?.timezone ?? browserTimeZone();
   const [data, setData] = useState<{ tasks: Task[]; reminders: Reminder[]; notes: Note[]; events: CalendarEvent[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const [tasks, reminders, notes, events] = await Promise.all([listTasks(), listReminders(), listNotes(5), listEvents()]);
       setData({ tasks, reminders, notes, events });
+      // First visit on this device with an empty account → the short introduction (once).
+      if (!isOnboarded()) {
+        if (shouldOnboard(false, { notes: notes.length, tasks: tasks.length, reminders: reminders.length, events: events.length })) navigate('/app/welcome', { replace: true });
+        else setOnboarded(true);
+      }
     } catch (e) { setError(errorMessage(t, e)); }
-  }, [t]);
+  }, [t, navigate]);
   useEffect(() => { void load(); }, [load]);
 
   const now = new Date();
@@ -147,7 +154,7 @@ export default function Dashboard() {
   function TaskRow({ task, onToggle, badge }: { task: Task; onToggle: (t: Task) => void; badge?: ReactNode }) {
     return (
       <li className="flex items-center gap-3 px-3 py-2.5 text-sm">
-        <button onClick={() => onToggle(task)} aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')} className="text-muted hover:text-accent-600">
+        <button onClick={() => onToggle(task)} aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')} className="-m-2 rounded-full p-2 text-muted hover:text-accent-600">
           {task.status === 'done' ? <CheckCircle2 className="size-5 text-emerald-600" /> : <Circle className="size-5" />}
         </button>
         <span className={task.status === 'done' ? 'flex-1 text-muted line-through' : 'flex-1'}>{task.title}</span>

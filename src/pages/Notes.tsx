@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router';
 import { Lightbulb, NotebookPen, Pencil, Pin, PinOff, Plus, Trash2, UserRound } from 'lucide-react';
 import { createNote, deleteNote, listNotes, updateNote } from '../lib/api';
 import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
@@ -19,7 +20,10 @@ export default function Notes() {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<NoteKind | 'all'>('all');
-  const [editing, setEditing] = useState<Partial<Note> | null>(null);
+  const [params, setParams] = useSearchParams();
+  // /app/notes?new=1 (from the welcome screen) opens the editor straight away.
+  const [editing, setEditing] = useState<Partial<Note> | null>(params.get('new') ? { kind: 'note', body: '' } : null);
+  const closeEditor = () => { setEditing(null); if (params.get('new')) setParams({}, { replace: true }); };
 
   useEffect(() => { listNotes().then(setNotes).catch((e) => setError(errorMessage(t, e))); }, [t]);
 
@@ -38,7 +42,7 @@ export default function Notes() {
       <div className="mb-4 flex flex-wrap gap-2" role="tablist">
         {(['all', ...KINDS] as const).map((k) => (
           <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)}
-            className={cx('rounded-full px-3 py-1.5 text-sm', filter === k ? 'bg-navy-900 text-white' : 'bg-white text-muted border border-line hover:text-ink')}>
+            className={cx('rounded-full px-3 py-1.5 text-sm', filter === k ? 'bg-navy-900 text-white dark:bg-accent-600' : 'bg-surface text-muted border border-line hover:text-ink')}>
             {k === 'all' ? t('notes.filterAll') : t(`type.${k}` as TranslationKey)}
           </button>
         ))}
@@ -70,8 +74,8 @@ export default function Notes() {
         </ul>
       )}
       {editing && (
-        <NoteEditor note={editing} categories={categories} onClose={() => setEditing(null)}
-          onSaved={(saved) => { setNotes((prev) => (editing.id ? prev!.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...(prev ?? [])])); setEditing(null); }} />
+        <NoteEditor note={editing} categories={categories} onClose={closeEditor}
+          onSaved={(saved) => { setNotes((prev) => (editing.id ? prev!.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...(prev ?? [])])); closeEditor(); }} />
       )}
     </div>
   );

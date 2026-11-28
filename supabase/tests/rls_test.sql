@@ -48,9 +48,9 @@ select pg_temp.expect_error($$insert into public.notes (user_id, body) values ('
   'A cannot insert a note owned by B');
 select pg_temp.expect_error($$update public.profiles set id = 'bbbbbbbb-0000-0000-0000-000000000002'$$,
   'A cannot change profile id');
-select pg_temp.expect_error($$update public.subscriptions set plan = 'premium'$$,
-  'A cannot self-upgrade to premium');
-select pg_temp.expect_error($$insert into public.subscriptions (user_id, plan) values ('aaaaaaaa-0000-0000-0000-000000000001', 'premium')$$,
+select pg_temp.expect_error($$update public.subscriptions set plan = 'pro'$$,
+  'A cannot self-upgrade to pro');
+select pg_temp.expect_error($$insert into public.subscriptions (user_id, plan) values ('aaaaaaaa-0000-0000-0000-000000000001', 'pro')$$,
   'A cannot insert a subscription');
 select pg_temp.expect_error($$update public.usage_counters set notes_created = 0$$,
   'A cannot reset usage counters');
@@ -107,6 +107,16 @@ update public.tasks set status = 'done';
 select pg_temp.expect((select completed_at is not null from public.tasks), 'completed_at set when task done');
 update public.tasks set status = 'open';
 select pg_temp.expect((select completed_at is null from public.tasks), 'completed_at cleared when reopened');
+reset role;
+
+-- ---------- Push devices (migration 7): owner-only, no direct writes ----------
+select pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000001');
+select public.mvl_push_subscribe('https://fcm.googleapis.com/fcm/send/rls-a', repeat('B', 87), repeat('A', 22));
+select pg_temp.expect((select count(*) = 1 from public.mvl_push_subscriptions), 'A sees A''s push device');
+reset role;
+select pg_temp.as_user('bbbbbbbb-0000-0000-0000-000000000002');
+select pg_temp.expect((select count(*) = 0 from public.mvl_push_subscriptions), 'B cannot see A''s push devices');
+select pg_temp.expect_error($$delete from public.mvl_push_subscriptions$$, 'B cannot delete push devices directly');
 reset role;
 
 -- ---------- Account deletion cascades ----------

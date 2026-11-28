@@ -37,14 +37,14 @@ begin
   return r;
 end $$;
 
--- Users: F free, X free, Y free, P premium (monthly), Q premium (annual), A admin, T tester
+-- Users: F free, X free, Y free, P plus (monthly), Q pro (yearly), A admin, T tester
 insert into auth.users (id, email) values
   ('f0000000-0000-0000-0000-000000000001', 'f@test'), ('a0000000-0000-0000-0000-000000000007', 'x@test'),
   ('b0000000-0000-0000-0000-000000000008', 'y@test'), ('c0000000-0000-0000-0000-000000000003', 'p@test'),
   ('d0000000-0000-0000-0000-000000000004', 'q@test'), ('e0000000-0000-0000-0000-000000000005', 'admin@test'),
   ('e0000000-0000-0000-0000-000000000006', 'tester@test');
-update public.subscriptions set plan = 'premium', billing_interval = 'month' where user_id = 'c0000000-0000-0000-0000-000000000003';
-update public.subscriptions set plan = 'premium', billing_interval = 'year' where user_id = 'd0000000-0000-0000-0000-000000000004';
+update public.subscriptions set plan = 'plus', billing_interval = 'month' where user_id = 'c0000000-0000-0000-0000-000000000003';
+update public.subscriptions set plan = 'pro', billing_interval = 'year' where user_id = 'd0000000-0000-0000-0000-000000000004';
 insert into public.mvl_staff values ('e0000000-0000-0000-0000-000000000005', 'admin'), ('e0000000-0000-0000-0000-000000000006', 'tester');
 
 -- ===================== Access control =====================
@@ -63,7 +63,7 @@ select pg_temp.expect_error($$select public.mvl_finish_ai_capture(gen_random_uui
 select pg_temp.expect_error($$select public.mvl_admin_usage_summary(null)$$, 'non-admin cannot read usage dashboard');
 select pg_temp.expect_error($$select public.mvl_admin_finance_summary(null)$$, 'non-admin cannot read finance dashboard');
 select pg_temp.expect_error($$select public.mvl_admin_update_settings(p_ai_mode => 'on')$$, 'non-admin cannot change settings');
-select pg_temp.expect((select count(*) = 2 from public.mvl_plan_limits), 'user can read plan limits');
+select pg_temp.expect((select count(*) = 3 from public.mvl_plan_limits), 'user can read plan limits (free, plus, pro)');
 reset role;
 select set_config('request.jwt.claims', '', false);
 set role anon;
@@ -118,15 +118,15 @@ select pg_temp.expect(pg_temp.res('b0000000-0000-0000-0000-000000000008', 'text'
 update public.mvl_plan_limits set captures_per_hour = 5, captures_per_day = 7 where plan = 'free';
 
 -- ===================== Premium: captures and minutes enforced independently =====================
-update public.mvl_plan_limits set audio_minutes_per_month = 10 where plan = 'premium';
-select pg_temp.expect((pg_temp.capture('c0000000-0000-0000-0000-000000000003', 'voice', 240)->>'ok')::boolean, 'premium: 4 min capture ok');
-select pg_temp.expect((pg_temp.capture('c0000000-0000-0000-0000-000000000003', 'voice', 240)->>'ok')::boolean, 'premium: second 4 min capture ok (8/10 min)');
-select pg_temp.expect(pg_temp.res('c0000000-0000-0000-0000-000000000003', 'voice', 240)->>'reason' = 'quota_minutes', 'premium: minutes limit refuses with only 2 captures used');
-select pg_temp.expect((pg_temp.capture('c0000000-0000-0000-0000-000000000003', 'voice', 90)->>'ok')::boolean, 'premium: a short capture that fits the remaining minutes is allowed');
-update public.mvl_plan_limits set audio_minutes_per_month = 600, ai_captures_per_month = 3 where plan = 'premium';
-select pg_temp.expect(pg_temp.res('c0000000-0000-0000-0000-000000000003', 'text', 0)->>'reason' = 'quota_captures', 'premium: captures limit refuses while minutes remain');
-update public.mvl_plan_limits set ai_captures_per_month = 300 where plan = 'premium';
-select pg_temp.expect(pg_temp.res('c0000000-0000-0000-0000-000000000003', 'voice', 400)->>'reason' = 'audio_too_long', 'premium: recording over 5 min refused');
+update public.mvl_plan_limits set audio_minutes_per_month = 10 where plan = 'plus';
+select pg_temp.expect((pg_temp.capture('c0000000-0000-0000-0000-000000000003', 'voice', 240)->>'ok')::boolean, 'plus: 4 min capture ok');
+select pg_temp.expect((pg_temp.capture('c0000000-0000-0000-0000-000000000003', 'voice', 240)->>'ok')::boolean, 'plus: second 4 min capture ok (8/10 min)');
+select pg_temp.expect(pg_temp.res('c0000000-0000-0000-0000-000000000003', 'voice', 240)->>'reason' = 'quota_minutes', 'plus: minutes limit refuses with only 2 captures used');
+select pg_temp.expect((pg_temp.capture('c0000000-0000-0000-0000-000000000003', 'voice', 90)->>'ok')::boolean, 'plus: a short capture that fits the remaining minutes is allowed');
+update public.mvl_plan_limits set audio_minutes_per_month = 600, ai_captures_per_month = 3 where plan = 'plus';
+select pg_temp.expect(pg_temp.res('c0000000-0000-0000-0000-000000000003', 'text', 0)->>'reason' = 'quota_captures', 'plus: captures limit refuses while minutes remain');
+update public.mvl_plan_limits set ai_captures_per_month = 300 where plan = 'plus';
+select pg_temp.expect(pg_temp.res('c0000000-0000-0000-0000-000000000003', 'voice', 400)->>'reason' = 'audio_too_long', 'plus: recording over 5 min refused');
 
 -- ===================== Cost recording =====================
 do $$ declare r jsonb; c numeric; u public.mvl_ai_usage; begin
@@ -193,16 +193,16 @@ select pg_temp.as_user('c0000000-0000-0000-0000-000000000003');
 select pg_temp.expect((select count(*) = 1 from public.notes where body = 'premium note before budget stop'), 'budget stop leaves existing notes intact');
 insert into public.notes (body) values ('premium manual note during budget stop');
 select pg_temp.expect((select count(*) = 2 from public.notes), 'manual notes can still be created while AI budget is exhausted');
-select pg_temp.expect((public.mvl_my_usage()->>'plan') = 'premium', 'my_usage reports plan');
+select pg_temp.expect((public.mvl_my_usage()->>'plan') = 'plus', 'my_usage reports plan');
 reset role;
 
 -- ===================== Plans cannot be unlimited =====================
 select pg_temp.as_user('e0000000-0000-0000-0000-000000000005');
-select pg_temp.expect_error($$select public.mvl_admin_update_plan_limits('premium', 0, 600, 300, 30, 60)$$, 'admin cannot set captures to 0/unlimited');
-select pg_temp.expect_error($$select public.mvl_admin_update_plan_limits('premium', null, 600, 300, 30, 60)$$, 'admin cannot set captures to NULL (unlimited)');
+select pg_temp.expect_error($$select public.mvl_admin_update_plan_limits('plus', 0, 600, 300, 30, 60)$$, 'admin cannot set captures to 0/unlimited');
+select pg_temp.expect_error($$select public.mvl_admin_update_plan_limits('plus', null, 600, 300, 30, 60)$$, 'admin cannot set captures to NULL (unlimited)');
 select pg_temp.expect_error($$select public.mvl_admin_update_settings(p_ai_mode => 'everyone')$$, 'invalid AI mode rejected');
-select public.mvl_admin_update_plan_limits('premium', 300, 600, 300, 30, 60);
-select pg_temp.expect((select audio_minutes_per_month = 600 from public.mvl_plan_limits where plan = 'premium'), 'admin can change limits without code changes');
+select public.mvl_admin_update_plan_limits('plus', 300, 600, 300, 30, 60);
+select pg_temp.expect((select audio_minutes_per_month = 600 from public.mvl_plan_limits where plan = 'plus'), 'admin can change limits without code changes');
 select public.mvl_admin_update_settings(p_ai_mode => 'off', p_ai_paused_message => 'Back soon');
 select pg_temp.expect((public.mvl_my_usage()->>'ai_available')::boolean = false, 'kill switch via admin RPC takes effect');
 select public.mvl_admin_update_settings(p_ai_mode => 'on');
@@ -222,11 +222,13 @@ do $$ declare u jsonb; f jsonb; begin
   perform pg_temp.expect(u::text not like '%manual note%' and f::text not like '%manual note%', 'dashboards contain no note content');
   perform pg_temp.expect(u::text not like '%@test%' and f::text not like '%@test%', 'dashboards contain no emails');
   perform pg_temp.expect(jsonb_array_length(u->'top_users') > 0 and length(u->'top_users'->0->>'user') = 8, 'top users are pseudonymous 8-char hashes');
-  perform pg_temp.expect((f->'users'->>'premium_monthly')::int = 1 and (f->'users'->>'premium_annual')::int = 1, 'finance counts premium monthly/annual');
+  perform pg_temp.expect((f->'users'->>'plus')::int = 1 and (f->'users'->>'pro')::int = 1 and (f->'users'->>'paid')::int = 2, 'finance counts plus and pro subscribers');
+  perform pg_temp.expect((f->'users'->>'plus_monthly')::int = 1 and (f->'users'->>'pro_yearly')::int = 1, 'finance splits monthly and yearly subscribers');
   perform pg_temp.expect((f->'users'->>'monthly_active')::int = 2, 'finance MAU from activity markers');
-  -- 4.99 + 39.99/12 = 8.3225 → 8.32 ; fees (4.99*0.022+0.25) + (39.99*0.022+0.25)/12 = 0.35978 + 0.09415 = 0.45
-  perform pg_temp.expect((f->>'revenue_gross_eur')::numeric = 8.32, 'projected revenue €8.32 (monthly-equivalent)');
-  perform pg_temp.expect((f->>'stripe_fees_eur')::numeric = 0.45, 'estimated Stripe fees €0.45');
+  -- Prices are USD (fx 0.90): plus monthly 4.99 → 4.491; pro yearly 99.90 → 89.91, /12 = 7.4925; total 11.9835 → 11.98
+  -- fees (4.491*0.022+0.25) + (89.91*0.022+0.25)/12 = 0.348802 + 0.185668 = 0.53447 → 0.53
+  perform pg_temp.expect((f->>'revenue_gross_eur')::numeric = 11.98, 'projected revenue €11.98 (plus monthly + pro yearly / 12, USD converted)');
+  perform pg_temp.expect((f->>'stripe_fees_eur')::numeric = 0.53, 'estimated Stripe fees €0.53 (yearly fee spread over 12 months)');
   perform pg_temp.expect((f->>'operating_expenses_eur')::numeric = 18.00, 'USD expenses converted at configured rate');
   perform pg_temp.expect(abs((f->>'estimated_contribution_eur')::numeric
       - ((f->>'revenue_net_eur')::numeric - (f->>'stripe_fees_eur')::numeric - (f->>'ai_costs_eur')::numeric - (f->>'operating_expenses_eur')::numeric)) <= 0.02,

@@ -1,23 +1,40 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { errorMessage, useI18n } from '../lib/i18n';
 import { useAuth } from '../auth/AuthProvider';
+import { fetchGoogleEnabled } from '../auth/providers';
 import { Alert, Button, Card, Field, Input, Spinner } from '../components/ui';
 import { Logo } from '../components/AppShell';
 
 /** Google sign-in through Supabase Auth. A verified Google email that matches an existing
- *  account is linked to it by Supabase (no duplicate account). */
+ *  account is linked to it by Supabase (no duplicate account).
+ *  The button is shown only when the project has Google enabled (read from Supabase's public
+ *  auth settings); a disabled provider would otherwise send the user to a raw JSON error page.
+ *  The authorize URL is built here (skipBrowserRedirect) so any error is shown inside the app. */
 function GoogleButton({ onError }: { onError: (msg: string) => void }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void fetchGoogleEnabled(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY).then((v) => { if (alive) setEnabled(v); });
+    return () => { alive = false; };
+  }, []);
+  if (enabled === false) return null;
   const go = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/app` } });
-    // On success the browser navigates away to Google; we only get here on an error.
-    setLoading(false);
-    if (error) onError(/not enabled|unsupported provider/i.test(error.message) ? t('auth.googleUnavailable') : errorMessage(t, error));
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/app`, skipBrowserRedirect: true },
+    });
+    if (error || !data?.url) {
+      setLoading(false);
+      onError(error && !/not enabled|unsupported provider/i.test(error.message) ? errorMessage(t, error) : t('auth.googleUnavailable'));
+      return;
+    }
+    window.location.assign(data.url);
   };
   return (
     <>
@@ -108,7 +125,11 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  if (session) return <Navigate to="/app" replace />;
+  // Return to the page that sent the user here (internal paths only, never an external URL).
+  const from = (useLocation().state as { from?: unknown } | null)?.from;
+  // Only our own pages (never another site): /app… or /pricing…, optionally with a query string.
+  const target = typeof from === 'string' && /^\/(app|pricing)(\/|\?|$)/.test(from) && !from.startsWith('//') ? from : '/app';
+  if (session) return <Navigate to={target} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -116,7 +137,7 @@ export function Login() {
     // The password is sent exactly as typed (spaces can be part of it); the email is trimmed.
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
-    if (error) { setError(errorMessage(t, error)); setErrorCode((error as { code?: string }).code ?? null); } else navigate('/app');
+    if (error) { setError(errorMessage(t, error)); setErrorCode((error as { code?: string }).code ?? null); } else navigate(target);
   };
 
   return (
@@ -187,6 +208,12 @@ export function Register() {
           <Field label={t('auth.password')} hint={t('auth.passwordHint')}><PasswordInput autoComplete="new-password" minLength={8} value={password} onChange={setPassword} /></Field>
           {error && <Alert>{error}</Alert>}
           <Button type="submit" loading={loading} className="w-full">{t('auth.register')}</Button>
+          <p className="text-center text-xs text-muted">
+            {t('auth.agree').split(/(\{terms\}|\{privacy\})/).map((part, i) =>
+              part === '{terms}' ? <Link key={i} to="/terms" className="text-accent-700 hover:underline">{t('legal.terms')}</Link>
+              : part === '{privacy}' ? <Link key={i} to="/privacy" className="text-accent-700 hover:underline">{t('legal.privacy')}</Link>
+              : part)}
+          </p>
         </form>
       </>)}
     </AuthLayout>

@@ -50,7 +50,7 @@ export default function Tasks() {
       <div className="mb-4 flex gap-2" role="tablist">
         {(['open', 'done'] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-            className={cx('rounded-full px-3 py-1.5 text-sm', tab === k ? 'bg-navy-900 text-white' : 'border border-line bg-white text-muted hover:text-ink')}>
+            className={cx('rounded-full px-3 py-1.5 text-sm', tab === k ? 'bg-navy-900 text-white dark:bg-accent-600' : 'border border-line bg-surface text-muted hover:text-ink')}>
             {t(k === 'open' ? 'tasks.open' : 'tasks.done')} {tasks && <span className="opacity-60">· {tasks.filter((x) => x.status === k).length}</span>}
           </button>
         ))}
@@ -65,7 +65,7 @@ export default function Tasks() {
                 const cat = task.category_id ? byId.get(task.category_id) : null;
                 return (
                   <li key={task.id} className="flex items-start gap-3 px-4 py-3">
-                    <button onClick={() => toggle(task)} className="mt-0.5 text-muted hover:text-accent-600" aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')}>
+                    <button onClick={() => toggle(task)} className="-m-2 mt-[-0.375rem] rounded-full p-2 text-muted hover:text-accent-600" aria-label={task.status === 'open' ? t('tasks.markDone') : t('tasks.reopen')}>
                       {task.status === 'done' ? <CheckCircle2 className={cx('size-5 text-emerald-600', justDone.has(task.id) && 'animate-pop')} /> : <Circle className="size-5" />}
                     </button>
                     <div className="min-w-0 flex-1">

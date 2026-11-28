@@ -55,8 +55,8 @@ jobs:
           if VITE_GEMINI_API_KEY=should-fail npm run build; then echo "guard did not refuse"; exit 1; fi
           if VITE_OPENAI_API_KEY=should-fail npm run build; then echo "guard did not refuse"; exit 1; fi
       - name: Edge Function type check
-        run: deno check supabase/functions/process-voice/index.ts supabase/functions/delete-account/index.ts
+        run: deno check supabase/functions/process-voice/index.ts supabase/functions/delete-account/index.ts supabase/functions/billing/index.ts supabase/functions/stripe-webhook/index.ts supabase/functions/ai-connections/index.ts supabase/functions/push/index.ts supabase/functions/send-reminders/index.ts
       - name: Edge Function orchestration tests
-        run: deno test --allow-env --allow-read=supabase/functions/_shared/__fixtures__ supabase/functions/process-voice/
+        run: deno test --allow-env --allow-read=supabase/functions/_shared/__fixtures__ supabase/functions/process-voice/ supabase/functions/billing/ supabase/functions/stripe-webhook/ supabase/functions/delete-account/ supabase/functions/ai-connections/ supabase/functions/push/ supabase/functions/send-reminders/
       - name: Database tests (migrations, RLS, financial controls, concurrency)
         run: bash scripts/test-db.sh

@@ -35,3 +35,6 @@ eval-data/
 # Database backups contain personal data — keep outside the repo
 backup/
 *.dump
+
+.pwa-test/
+.ui-test

@@ -15,6 +15,13 @@ import Schedule from './pages/Schedule';
 import Memory from './pages/Memory';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import Pricing from './pages/Pricing';
+import BillingSuccess from './pages/BillingSuccess';
+import Billing from './pages/Billing';
+import Welcome from './pages/Welcome';
+import { PwaBanners } from './pwa/PwaBanners';
+import { isNativeApp } from './native/platform';
+import { PrivacyPolicy, TermsOfService } from './pages/Legal';
 import type { UiLanguage } from './lib/types';
 import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
 import { getLanguage } from '../supabase/functions/_shared/languages.ts';
@@ -33,7 +40,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
   if (loading) return <Spinner />;
-  if (!session) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  // Keep the query string so deep links (e.g. /app/billing?changed=1, app shortcuts) survive sign-in.
+  if (!session) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   return <>{children}</>;
 }
 
@@ -65,12 +73,17 @@ export default function App() {
     <AuthProvider>
       <Localised>
         <BrowserRouter>
+          <PwaBanners />
           <Routes>
-            <Route path="/" element={<Landing />} />
+            {/* The iOS app opens straight into the app (sign-in first if needed), not the marketing page. */}
+            <Route path="/" element={isNativeApp() ? <Navigate to="/app" replace /> : <Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             <Route path="/app" element={<RequireAuth><AppShell /></RequireAuth>}>
               <Route index element={<Dashboard />} />
               <Route path="capture" element={<Capture />} />
@@ -80,6 +93,9 @@ export default function App() {
               <Route path="memory" element={<Memory />} />
               <Route path="settings" element={<Settings />} />
               <Route path="admin" element={<Admin />} />
+              <Route path="billing" element={<Billing />} />
+              <Route path="billing/success" element={<BillingSuccess />} />
+              <Route path="welcome" element={<Welcome />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -45,7 +45,10 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Server-side audio length from the file (WebM/Ogg/MP4) before reserving | ✅ | parser tests on real Chromium MediaRecorder WebM + ffmpeg Ogg/MP4 fixtures; a 60 s low-bitrate file claimed as 2 s is reserved at 60 s |
 | Microphone flow (permission, record, timer, stop/cancel, upload, review, edit/accept/reject, save) | 🟡 | end-to-end in Chromium with a fake microphone and a mocked backend (tester success, denied, in use, non-staff, provider busy); **real phones (iOS Safari, Android Chrome) not tested yet** |
 | Multilingual: language registry, interface vs spoken languages (up to 3), mixed-language hints | ✅ code / ⬜ quality | registry + DB tests; **no language verified for voice yet** (needs native-speaker recordings) |
-| Google sign-in | 🟡 | button and redirect tested in a browser; **needs Google Cloud credentials + Supabase provider** (docs/GOOGLE_OAUTH_SETUP.md) |
+| Google sign-in | 🔴 not working live | cause proven from auth logs: provider disabled in Supabase. Button now hidden while disabled; with provider on, the redirect and the cancel/error paths are browser-tested with mocks. **Needs owner: Google Cloud client + Supabase provider; not fixed until a real Google login succeeds** (docs/GOOGLE_OAUTH_SETUP.md) |
+| Privacy policy and terms pages (`/privacy`, `/terms`) | 🟡 draft | factual content checked against the code; linked from landing, register, pricing and settings; **identity, contact, legal basis, refunds, VAT and governing law left for the owner + legal review** |
+| Free/Plus/Pro plans, caps, payment grace, upgrade/downgrade, invoices (Stripe test mode) | 🟡 | DB + function + mocked browser tests (simulated Stripe); **migration 6 not applied, functions not deployed, no real test-mode run** (docs/STRIPE_SETUP.md) |
+| Bring Your Own AI (user's own OpenAI key in Vault) | 🟡 | DB (Vault access, isolation, deletion, races) + function tests (fakes); **not deployed; no real key tested**; byoai_mode admins_only (docs/BYOAI_SECURITY.md) |
 | Note translation | ⬜ | designed (original kept, translation stored beside it, counted as an AI capture); not built |
 | Admin dashboard (usage, controls, limits, finance with labels, expenses) | 🟡 | render-tested with mocked data under the real CSP; needs a live DB |
 | Allowance display + refusal messages in the app | 🟡 | render-tested with mocked data |
@@ -62,7 +65,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 ⬜ Apply migration, deploy functions, run the manual test plan below, fix what breaks · ⬜ Kinyarwanda WER evaluation and provider decision · ⬜ Translate validator warnings
 
 ## Milestone 3 — Reminders that actually fire
-⬜ `pg_cron` job → Edge Function → Web Push (VAPID) with notification permission flow · ⬜ Service worker (installable PWA, offline shell) · ⬜ Server-side recurrence advance after delivery
+🟡 Web Push: built and tested offline (migration 7, `push` + `send-reminders`, RFC 8291 encryption, Settings card, service-worker handlers), NOT live: needs approvals in docs/PUSH_SETUP.md · ✅ Service worker (installable PWA, offline shell) · ⬜ Server-side recurrence advance after delivery (decision: the user completes recurring reminders)
 
 ## Milestone 4 — Memory intelligence
 ⬜ pgvector embeddings on notes and transcripts · ⬜ "Ask your memory": answer **only** from retrieved records, each claim linked to its source, AI suggestions visually separated · ⬜ Transcript translation (keep original)
@@ -74,7 +77,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 ⬜ Decide payment provider (Stripe availability for your country vs mobile money) · ⬜ Checkout + webhook writing `subscriptions` with the service role · ⬜ Billing page · ⬜ Revisit free-tier metric (see docs/PRODUCT.md)
 
 ## Milestone 7 — Production readiness
-⬜ Vercel deployment config + env · ⬜ Custom SMTP · ⬜ Error monitoring · ⬜ Code splitting · ⬜ Playwright e2e against a Supabase branch · ⬜ Privacy policy and data export
+⬜ Vercel deployment config + env · ⬜ Custom SMTP · ⬜ Error monitoring · ⬜ Code splitting · ⬜ Playwright e2e against a Supabase branch · 🟡 Privacy policy (draft) · ✅ Data export (Settings → Download all my data; tested in real Chromium, incl. 2,500 notes and a failed table)
 
 ## Manual test plan (once the project is live)
 1. Register → confirm email → land on dashboard; check that Settings shows your device time zone and 7 categories.
@@ -97,5 +100,20 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Optional sound cues (off by default) | ✅ | unit tests; toggle in Settings |
 | Reduced motion | ✅ | emulated `prefers-reduced-motion: reduce`: no breathing, rings or stagger |
 | Task completion feedback | ✅ | browser test |
-| PWA icons (PNG 192/512/maskable, apple-touch) | ✅ files / ⬜ install | manifest served; home-screen install not tested on a phone |
+| Installable app (PWA): service worker, offline page, safe updates, install card, shortcuts, screenshots | ✅ Chromium / 🟡 devices | `npm run test:pwa` (real Chromium, production build, mocked Supabase): installability 0 errors; **real iPhone/Android/Safari not tested** |
+| Reminder notifications (Web Push) | 🟡 | built + tested offline, not live (docs/PUSH_SETUP.md) |
+| Dark mode (system / light / dark) | ✅ | every main page checked in real Chromium at 390/1366 px |
+| Onboarding (welcome, mic test, honest voice status) | ✅ | shown once to new empty accounts; tested in real Chromium |
+| Store apps (Play via TWA, App Store via Capacitor) | ⬜ prepared | TWA template + steps; nothing built or published |
+
+## Payments: Stripe, test mode (2026-11-20, branch `claude/stripe-billing`)
+| Item | Status | Evidence |
+|---|---|---|
+| Migration 5: Stripe statuses, webhook ledger, service-role link/apply functions | ✅ tested locally / ⬜ not applied | `billing_test.sql` (40+ checks); rollback refusal, round trip and re-apply tested |
+| Webhook: signature, replay window, test/live separation, re-fetch, price allow-list, idempotency | ✅ offline / ⬜ live Stripe | 20 Deno tests + Vitest signature tests against Node crypto; mutation-checked |
+| Checkout and Customer Portal (server-side price, customer bound to user, origin allow-list) | ✅ offline / ⬜ live Stripe | 14 Deno tests; mutation-checked |
+| Account deletion cancels the Stripe subscription first | ✅ offline | 6 Deno tests |
+| Pricing page, success page (server-confirmed only), Settings plan card, en/fr | ✅ mocked browser | 11 browser scenarios at 360 px and desktop, 0 console errors |
+| Real test-mode run with a Stripe account | ⬜ | needs the owner's Stripe test account, secrets and approvals (`docs/STRIPE_SETUP.md`) |
+| Taxes/VAT, terms, refund policy, recorded revenue in admin | ⬜ | required before live payments |
 
