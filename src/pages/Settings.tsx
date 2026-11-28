@@ -9,6 +9,7 @@ import { AiProviderCard } from '../components/AiProviderCard';
 import { InstallCard } from '../pwa/InstallCard';
 import { AppearanceCard } from '../components/AppearanceCard';
 import { setOnboarded } from '../lib/onboarding';
+import { ExportCard } from '../components/ExportCard';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -179,6 +180,8 @@ export default function Settings() {
           </div>
         </div>
       </Card>
+
+      <ExportCard />
 
       <Card>
         <CardHeader title={t('settings.privacy')} icon={<ShieldCheck className="size-4 text-accent-600" />} />

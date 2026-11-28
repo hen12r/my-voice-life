@@ -10,7 +10,7 @@ import { Logo } from '../components/AppShell';
 // the owner must complete the bracketed items and have the texts reviewed before a public launch.
 // English only for now; a reviewed French version is still needed.
 
-const UPDATED = '21 November 2026';
+const UPDATED = '28 November 2026';
 
 function Shell({ title, children }: { title: string; children: ReactNode }) {
   const { t } = useI18n();
@@ -91,7 +91,7 @@ export function PrivacyPolicy() {
       </ul>
 
       <h2>Your rights</h2>
-      <p>You can view, edit and delete your content in the app at any time, and delete your account yourself. For any other request (for example a copy of your data), contact us at the address above. <Todo>add the applicable data-protection authority and legal basis after review</Todo></p>
+      <p>You can view, edit and delete your content in the app at any time, download a copy of all of it yourself (Settings → Your data → Download all my data, a JSON file), and delete your account yourself. For any other request, contact us at the address above. <Todo>add the applicable data-protection authority and legal basis after review</Todo></p>
 
       <h2>Children</h2>
       <p><Todo>minimum age and parental-consent rules — to be decided by the owner with advice</Todo></p>

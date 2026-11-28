@@ -20,7 +20,8 @@ const DATA = {
 };
 
 async function mockSupabase(ctx, opts = {}) {
-  const data = opts.empty ? Object.fromEntries(Object.keys(DATA).map((k) => [k, k === 'categories' ? DATA.categories : []])) : DATA;
+  const data = opts.empty ? Object.fromEntries(Object.keys(DATA).map((k) => [k, k === 'categories' ? DATA.categories : []])) : { ...DATA };
+  if (opts.manyNotes) data.notes = Array.from({ length: opts.manyNotes }, (_, i) => ({ id: `n${i}`, body: `note ${i}`, kind: 'note', is_pinned: false, category_id: null, created_at: new Date(now - i * 1000).toISOString(), search: `'note':1` }));
   await ctx.route('https://mockproj.supabase.co/**', (r) => {
     const req = r.request(); const u = req.url();
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*', 'Access-Control-Expose-Headers': 'Content-Range' };
@@ -29,9 +30,10 @@ async function mockSupabase(ctx, opts = {}) {
     if (u.includes('/auth/v1/settings')) return j({ external: { email: true, google: false } });
     if (u.includes('/auth/v1/token')) return j(SESSION);
     if (u.includes('/auth/v1/user')) return j(USER);
-    if (u.includes('/rest/v1/profiles')) return j({ id: 'u1', display_name: 'H', ui_language: 'en', speech_language: 'auto', speech_languages: [], timezone: 'UTC', daily_briefing_enabled: false });
+    const single = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
+    if (u.includes('/rest/v1/profiles')) return j(((p) => (single ? p : [p]))({ id: 'u1', display_name: 'H', ui_language: 'en', speech_language: 'auto', speech_languages: [], timezone: 'UTC', daily_briefing_enabled: false }));
     if (u.includes('/rpc/mvl_my_usage')) return j({ plan: 'free', is_staff: false, is_admin: false, ai_mode: 'admins_only', ai_available: false, captures_used: 0, captures_limit: 7, minutes_used: 0, minutes_limit: 15, max_capture_seconds: 120, resets_at: new Date().toISOString() });
-    if (u.includes('/rest/v1/subscriptions')) return j(null);
+    if (u.includes('/rest/v1/subscriptions')) return j(single ? null : []);
     if (u.includes('/functions/v1/billing')) return j({ configured: false, test_mode: false, prices: [], limits: {} });
     if (u.includes('/functions/v1/push')) return opts.pushLive ? j({ public_key: opts.pushLive }) : j({ error: 'not_found' }, 404);
     if (u.includes('/functions/v1/')) return j({ error: 'not_found' }, 404);
@@ -39,8 +41,10 @@ async function mockSupabase(ctx, opts = {}) {
     if (table && data[table]) {
       const rows = data[table];
       if (opts.failTable === table) return j({ message: 'boom', code: 'XX000' }, 500);
-      const range = req.headers()['range'];
-      const [from, to] = range ? range.split('-').map(Number) : [0, rows.length - 1];
+      // supabase-js pages with offset/limit query parameters (or a Range header).
+      const q = new URL(u).searchParams; const range = req.headers()['range'];
+      let [from, to] = range ? range.split('-').map(Number) : [0, rows.length - 1];
+      if (q.has('offset') || q.has('limit')) { from = Number(q.get('offset') ?? 0); to = from + Number(q.get('limit') ?? rows.length) - 1; }
       return j(rows.slice(from, to + 1), 200, { 'Content-Range': `${from}-${Math.min(to, rows.length - 1)}/${rows.length}` });
     }
     return j(u.includes('/rpc/') ? null : []);
@@ -159,6 +163,29 @@ const PAGES = ['/app', '/app/notes', '/app/tasks', '/app/schedule', '/app/captur
       const s = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, overflow: document.documentElement.scrollWidth > innerWidth + 1 }));
       if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'welcome-1366-dark.png') });
       check('2d welcome dark desktop', s.theme === 'dark' && !s.overflow, s);
+      await ctx.close();
+    }
+    // 3. Data export: a real download, valid JSON, every table complete (2,500 notes → 3 pages), no search vectors.
+    {
+      const ctx = await signedInContext(browser, { manyNotes: 2500 }); const page = await ctx.newPage();
+      await page.goto(BASE + '/app/settings'); await page.waitForTimeout(700);
+      const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }).catch(() => null), page.getByRole('button', { name: 'Download all my data' }).click()]);
+      if (!dl) { console.log('Export alert:', await page.getByRole('alert').allInnerTexts().catch(() => [])); await ctx.close(); throw new Error('3a: no download'); }
+      const file = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
+      const msg = await page.getByText('Downloaded: 2500 notes', { exact: false }).isVisible().catch(() => false);
+      const s = { name: dl.suggestedFilename(), format: file.format, version: file.version, counts: file.counts, hasSearch: JSON.stringify(file.data.notes).includes('"search"'), user: file.user_id, msg };
+      check('3a export file', /^my-voice-life-export-\d{4}-\d{2}-\d{2}\.json$/.test(s.name) && s.format === 'my-voice-life-export' && s.version === 1 && s.counts.notes === 2500 && s.counts.tasks === 1 && s.counts.reminders === 1 && s.counts.events === 1 && s.counts.voice_sessions === 1 && s.counts.categories === 1 && !s.hasSearch && s.user === 'u1' && msg, s);
+      await ctx.close();
+    }
+    {
+      // 3b. One table fails → clear error, and NO file is downloaded.
+      const ctx = await signedInContext(browser, { failTable: 'events' }); const page = await ctx.newPage();
+      let downloaded = false; page.on('download', () => { downloaded = true; });
+      await page.goto(BASE + '/app/settings'); await page.waitForTimeout(700);
+      await page.getByRole('button', { name: 'Download all my data' }).click();
+      const err = await page.getByText('The export did not finish, so no file was saved.', { exact: false }).waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+      await page.waitForTimeout(500);
+      check('3b export failure saves nothing', err && !downloaded, { err, downloaded });
       await ctx.close();
     }
   } finally {
