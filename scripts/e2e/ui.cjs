@@ -188,6 +188,57 @@ const PAGES = ['/app', '/app/notes', '/app/tasks', '/app/schedule', '/app/captur
       check('3b export failure saves nothing', err && !downloaded, { err, downloaded });
       await ctx.close();
     }
+    // 4. Notifications. The default headless shell has no Notification support, so these checks use the
+    //    full Chromium build in new-headless mode.
+    await browser.close(); // one browser at a time (memory)
+    const full = await chromium.launch({ channel: 'chromium' });
+    {
+      // 4a. Server part not deployed (push function 404) → honest "not available yet", no button.
+      const ctx = await signedInContext(full); await ctx.grantPermissions(['notifications'], { origin: BASE }); const page = await ctx.newPage();
+      await page.goto(BASE + '/app/settings'); await page.waitForTimeout(900);
+      const s = { info: await page.getByText('Notifications are not available yet', { exact: false }).isVisible(), button: await page.getByRole('button', { name: 'Turn on notifications' }).count() };
+      check('4a notifications unavailable state', s.info && s.button === 0, s);
+      await ctx.close();
+    }
+    {
+      // 4b. iPhone Safari, not installed → "install first" guidance, no button.
+      const ctx = await signedInContext(full, { viewport: { width: 390, height: 844 } });
+      const page = await ctx.newPage();
+      await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' }));
+      await page.goto(BASE + '/app/settings'); await page.waitForTimeout(900);
+      const s = { info: await page.getByText('notifications only work in the installed app', { exact: false }).isVisible(), button: await page.getByRole('button', { name: 'Turn on notifications' }).count() };
+      check('4b iPhone not installed → install first', s.info && s.button === 0, s);
+      await ctx.close();
+    }
+    {
+      // 4c. Server ready (mocked public key), real service worker: the card offers "Turn on"; a push
+      //     delivered to the service worker shows the reminder title with the time in the reminder's zone.
+      const ctx = await full.newContext({ viewport: { width: 1366, height: 900 } });
+      await mockSupabase(ctx, { pushLive: 'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8' });
+      await ctx.addInitScript((sess) => { localStorage.setItem('sb-mockproj-auth-token', JSON.stringify(sess)); localStorage.setItem('mvl-onboarded', '1'); }, SESSION);
+      await ctx.grantPermissions(['notifications'], { origin: BASE });
+      const page = await ctx.newPage();
+      await page.goto(BASE + '/app/settings'); await page.evaluate(() => navigator.serviceWorker.ready); await page.reload(); await page.waitForTimeout(1200);
+      const offered = await page.getByRole('button', { name: 'Turn on notifications' }).isVisible();
+      if (!offered) console.log('4c card:', await page.locator('section', { hasText: 'Reminder notifications' }).innerText().catch(() => 'no card'), await page.evaluate(async () => ({ sw: !!navigator.serviceWorker, ctrl: !!navigator.serviceWorker?.controller, reg: !!(await navigator.serviceWorker?.getRegistration()), perm: Notification.permission, pm: 'PushManager' in window })));
+      const cdp = await ctx.newCDPSession(page);
+      await cdp.send('ServiceWorker.enable');
+      const regId = await new Promise((resolve) => { cdp.on('ServiceWorker.workerRegistrationUpdated', (e) => { const r = e.registrations.find((x) => x.scopeURL.startsWith(BASE)); if (r) resolve(r.registrationId); }); setTimeout(() => resolve(null), 4000); });
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin: BASE, registrationId: String(regId), data: JSON.stringify({ kind: 'reminder', id: 'r1', title: 'Call the school', at: '2026-11-28T07:00:00Z', tz: 'Africa/Kigali' }) });
+      await page.waitForTimeout(800);
+      const shown = await page.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => ({ title: n.title, body: n.body, tag: n.tag, url: n.data && n.data.url })));
+      check('4c push → notification (real service worker)', offered && regId && shown.length === 1 && shown[0].title === 'Call the school' && /^0?9:00( AM)?$/.test(shown[0].body) && shown[0].tag === 'reminder-r1' && shown[0].url === '/app/schedule', { offered, regId, shown });
+      await page.getByRole('button', { name: 'Turn on notifications' }).click();
+      await page.waitForTimeout(6000);
+      const afterTap = { on: await page.getByText('On for this device.').isVisible().catch(() => false), error: (await page.getByRole('alert').allInnerTexts().catch(() => [])).join(' | ').slice(0, 160) };
+      R['4c tap "Turn on" in this sandbox (no push-service access)'] = afterTap;
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin: BASE, registrationId: String(regId), data: 'not json' });
+      await page.waitForTimeout(600);
+      const fallback = await page.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((n) => n.title));
+      check('4c malformed push still shows a safe default', fallback.includes('My Voice Life'), fallback);
+      await ctx.close();
+    }
+    await full.close();
   } finally {
     await browser.close(); stopServer();
   }

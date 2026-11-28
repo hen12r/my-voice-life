@@ -243,6 +243,17 @@ export const connectOpenAiKey = (apiKey: string) =>
 export const disconnectOpenAiKey = () =>
   callFunction<{ connected: boolean }>('ai-connections', JSON.stringify({ action: 'disconnect', provider: 'openai' }), true);
 
+// ---------------- Reminder notifications (Web Push). The function returns only the PUBLIC VAPID key;
+// devices are registered through validated database functions (RLS: the caller's own devices only).
+export const getPushPublicKey = async (): Promise<string> =>
+  (await callFunction<{ public_key: string }>('push', JSON.stringify({ action: 'config' }), true)).public_key;
+export const sendTestPush = (title: string, body: string) =>
+  callFunction<{ sent: number; removed: number }>('push', JSON.stringify({ action: 'test', title, body }), true);
+export const savePushSubscription = async (s: { endpoint: string; p256dh: string; auth: string }) =>
+  check(await supabase.rpc('mvl_push_subscribe', { p_endpoint: s.endpoint, p_p256dh: s.p256dh, p_auth: s.auth, p_user_agent: navigator.userAgent.slice(0, 300) }));
+export const removePushSubscription = async (endpoint: string) =>
+  checkMaybe(await supabase.rpc('mvl_push_unsubscribe', { p_endpoint: endpoint }));
+
 export function deleteAccount() {
   return callFunction<{ deleted: boolean }>('delete-account', JSON.stringify({ confirm: 'DELETE' }), true);
 }

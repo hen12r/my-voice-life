@@ -65,7 +65,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 ⬜ Apply migration, deploy functions, run the manual test plan below, fix what breaks · ⬜ Kinyarwanda WER evaluation and provider decision · ⬜ Translate validator warnings
 
 ## Milestone 3 — Reminders that actually fire
-⬜ `pg_cron` job → Edge Function → Web Push (VAPID) with notification permission flow · ⬜ Service worker (installable PWA, offline shell) · ⬜ Server-side recurrence advance after delivery
+🟡 Web Push: built and tested offline (migration 7, `push` + `send-reminders`, RFC 8291 encryption, Settings card, service-worker handlers), NOT live: needs approvals in docs/PUSH_SETUP.md · ✅ Service worker (installable PWA, offline shell) · ⬜ Server-side recurrence advance after delivery (decision: the user completes recurring reminders)
 
 ## Milestone 4 — Memory intelligence
 ⬜ pgvector embeddings on notes and transcripts · ⬜ "Ask your memory": answer **only** from retrieved records, each claim linked to its source, AI suggestions visually separated · ⬜ Transcript translation (keep original)
@@ -77,7 +77,7 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 ⬜ Decide payment provider (Stripe availability for your country vs mobile money) · ⬜ Checkout + webhook writing `subscriptions` with the service role · ⬜ Billing page · ⬜ Revisit free-tier metric (see docs/PRODUCT.md)
 
 ## Milestone 7 — Production readiness
-⬜ Vercel deployment config + env · ⬜ Custom SMTP · ⬜ Error monitoring · ⬜ Code splitting · ⬜ Playwright e2e against a Supabase branch · 🟡 Privacy policy (draft) · ⬜ Data export
+⬜ Vercel deployment config + env · ⬜ Custom SMTP · ⬜ Error monitoring · ⬜ Code splitting · ⬜ Playwright e2e against a Supabase branch · 🟡 Privacy policy (draft) · ✅ Data export (Settings → Download all my data; tested in real Chromium, incl. 2,500 notes and a failed table)
 
 ## Manual test plan (once the project is live)
 1. Register → confirm email → land on dashboard; check that Settings shows your device time zone and 7 categories.
@@ -101,7 +101,9 @@ Legend: ✅ implemented **and** tested · 🟡 implemented, not yet verified aga
 | Reduced motion | ✅ | emulated `prefers-reduced-motion: reduce`: no breathing, rings or stagger |
 | Task completion feedback | ✅ | browser test |
 | Installable app (PWA): service worker, offline page, safe updates, install card, shortcuts, screenshots | ✅ Chromium / 🟡 devices | `npm run test:pwa` (real Chromium, production build, mocked Supabase): installability 0 errors; **real iPhone/Android/Safari not tested** |
-| Reminder notifications (Web Push) | ⬜ | not built: needs VAPID keys, subscriptions table, scheduler (docs/PLATFORMS.md) |
+| Reminder notifications (Web Push) | 🟡 | built + tested offline, not live (docs/PUSH_SETUP.md) |
+| Dark mode (system / light / dark) | ✅ | every main page checked in real Chromium at 390/1366 px |
+| Onboarding (welcome, mic test, honest voice status) | ✅ | shown once to new empty accounts; tested in real Chromium |
 | Store apps (Play via TWA, App Store via Capacitor) | ⬜ prepared | TWA template + steps; nothing built or published |
 
 ## Payments: Stripe, test mode (2026-11-20, branch `claude/stripe-billing`)

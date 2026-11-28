@@ -546,6 +546,10 @@ const en = {
   'errors.provider_unavailable': 'OpenAI could not be reached to check your key. Try again in a moment.',
   'errors.plan_limit_ai_connections': 'Your plan doesn’t allow another AI connection.',
   'errors.too_many_attempts': 'Too many attempts. Wait a few minutes, then try again.',
+  'errors.no_devices': 'Notifications are not on for any device yet. Turn them on first.',
+  'errors.push_not_configured': 'Notifications are not available yet: the server part has not been switched on.',
+  'errors.push_limit_devices': 'Notifications are already on for 10 devices. Turn them off on a device you no longer use.',
+  'errors.push_register_failed': 'This browser could not register for notifications. Try again later, or use Chrome, Edge, Firefox or Safari.',
   'errors.connection_failed': 'Your key could not be saved. Nothing was stored. Try again.',
   'errors.unsupported_provider': 'Only OpenAI is supported for now.',
   'errors.plan_limit_reminders': 'You’ve reached your plan’s limit of active reminders. Complete or delete one, or upgrade your plan.',
@@ -1094,6 +1098,10 @@ const fr: Record<TranslationKey, string> = {
   'errors.provider_unavailable': 'Impossible de joindre OpenAI pour vérifier votre clé. Réessayez dans un instant.',
   'errors.plan_limit_ai_connections': 'Votre offre ne permet pas une autre connexion IA.',
   'errors.too_many_attempts': 'Trop de tentatives. Attendez quelques minutes, puis réessayez.',
+  'errors.no_devices': 'Les notifications ne sont encore activées sur aucun appareil. Activez-les d’abord.',
+  'errors.push_not_configured': 'Les notifications ne sont pas encore disponibles : la partie serveur n’a pas été activée.',
+  'errors.push_limit_devices': 'Les notifications sont déjà activées sur 10 appareils. Désactivez-les sur un appareil que vous n’utilisez plus.',
+  'errors.push_register_failed': 'Ce navigateur n’a pas pu s’inscrire aux notifications. Réessayez plus tard, ou utilisez Chrome, Edge, Firefox ou Safari.',
   'errors.connection_failed': 'Votre clé n’a pas pu être enregistrée. Rien n’a été stocké. Réessayez.',
   'errors.unsupported_provider': 'Seul OpenAI est pris en charge pour l’instant.',
   'errors.plan_limit_reminders': 'Vous avez atteint la limite de rappels actifs de votre offre. Terminez-en ou supprimez-en un, ou changez d’offre.',
@@ -1139,6 +1147,9 @@ export function errorMessage(t: (k: TranslationKey) => string, err: unknown): st
   // Plan caps are enforced by database triggers; their message starts with a stable marker.
   const cap = /PLAN_LIMIT_(REMINDERS|EVENTS|AI_CONNECTIONS)/.exec(raw);
   if (cap) return t(`errors.plan_limit_${cap[1].toLowerCase()}` as TranslationKey);
+  if (raw.includes('PUSH_LIMIT_DEVICES')) return t('errors.push_limit_devices');
+  // Browser push registration failures (e.g. no connection to the browser maker's push service).
+  if (/Registration failed|push service error|AbortError: Registration/i.test(raw)) return t('errors.push_register_failed');
   if (/Failed to fetch|NetworkError|network/i.test(raw)) return t('errors.network');
   return raw && raw.length < 160 ? raw : t('errors.generic');
 }

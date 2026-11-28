@@ -189,3 +189,30 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 - Live database (read-only counts): one note, task, reminder and event saved today 12:37–12:40 UTC (the owner's desktop test). 0 voice sessions ever.
 - Automated: 172 unit, 103 function, 11 DB suites (0 failures), build, `test:pwa`. All pass.
 - No APK or desktop installer generated (reasons in `docs/INSTALL_AND_UPDATE.md`). AI provider card shows "not available yet" while its function isn't deployed.
+
+## 2026-11-28 — Finishing the approval-free features (dark mode, onboarding, data export, reminder notifications)
+- **Dark mode** (`238311e`): system/light/dark in Settings; every main page checked in real Chromium at 390/1366 px. Also fixed stale "Premium" wording.
+- **Onboarding** (`0fe76a2`): 4 steps for new, empty accounts only:
+  - a mic test that keeps nothing;
+  - voice status from the server;
+  - install;
+  - first note.
+- **Download all my data** (`d4edd32`): one JSON file, every own table paged under RLS. A failed table saves no file. Privacy page updated.
+- **Reminder notifications** (`c987a6b` + this commit): built and tested offline, **not live**.
+  - Code: migration 7, `push` + `send-reminders` functions, RFC 8291/8292 encryption, Settings card, service-worker handlers, scheduler SQL, `docs/PUSH_SETUP.md`.
+  - Not tested: a real subscription, because the sandbox cannot reach Google's push service; the app shows a clear error, never a fake "On".
+- **Results:**
+
+  | Check | Result |
+  |---|---|
+  | typecheck | 0 errors |
+  | Vitest | 192 |
+  | Deno function tests | 118 |
+  | `deno check` | clean |
+  | `test:db` | all suites, 0 failures |
+  | build | passes |
+  | `test:pwa` | passes |
+  | `test:ui` | all 35 checks |
+
+  `test:ui` is a new real-Chromium suite. It is not run in CI, because CI has no browser; run it locally.
+- **Live:** nothing deployed, migrated, enabled or merged.

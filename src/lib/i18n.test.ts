@@ -70,4 +70,9 @@ describe('billing and account error messages', () => {
     });
     expect(missing).toEqual([]);
   });
+  it('maps browser push registration failures to a clear message', () => {
+    const t = (k: TranslationKey) => translate('en', k);
+    expect(errorMessage(t, new Error('Registration failed - permission denied'))).toBe(translate('en', 'errors.push_register_failed'));
+    expect(errorMessage(t, new Error('PUSH_LIMIT_DEVICES: notifications are on for 10 devices already'))).toBe(translate('en', 'errors.push_limit_devices'));
+  });
 });

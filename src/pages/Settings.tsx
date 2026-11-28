@@ -10,6 +10,7 @@ import { InstallCard } from '../pwa/InstallCard';
 import { AppearanceCard } from '../components/AppearanceCard';
 import { setOnboarded } from '../lib/onboarding';
 import { ExportCard } from '../components/ExportCard';
+import { NotificationsCard } from '../pwa/NotificationsCard';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -152,6 +153,8 @@ export default function Settings() {
           {catError && <div className="mt-3"><Alert>{catError}</Alert></div>}
         </div>
       </Card>
+
+      <NotificationsCard />
 
       <AppearanceCard />
 

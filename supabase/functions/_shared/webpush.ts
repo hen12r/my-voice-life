@@ -26,8 +26,8 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
-/** Copies into a fresh ArrayBuffer-backed array (what WebCrypto's typings expect). */
-const buf = (u: Uint8Array): Uint8Array<ArrayBuffer> => { const c = new Uint8Array(new ArrayBuffer(u.length)); c.set(u); return c; };
+/** Copies into a fresh ArrayBuffer (accepted by WebCrypto and fetch under every TypeScript version). */
+const buf = (u: Uint8Array): ArrayBuffer => { const ab = new ArrayBuffer(u.length); new Uint8Array(ab).set(u); return ab; };
 
 async function hmac(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
   const k = await crypto.subtle.importKey('raw', buf(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);

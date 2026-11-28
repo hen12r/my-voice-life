@@ -69,3 +69,39 @@ async function staleWhileRevalidate(req) {
   }).catch(() => hit || Response.error());
   return hit || network;
 }
+
+/* Reminder notifications (Web Push). The payload arrives end-to-end encrypted; the browser decrypts
+ * it before this handler runs. It contains only { kind, id, title, at, tz } for a reminder, or
+ * { kind: 'test', title, body }. Nothing is cached or stored here. */
+function reminderTime(at, tz) {
+  try {
+    return new Intl.DateTimeFormat(self.navigator.language || 'en', { hour: '2-digit', minute: '2-digit', timeZone: tz || undefined }).format(new Date(at));
+  } catch (e) { return ''; }
+}
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+  const title = typeof data.title === 'string' && data.title ? data.title.slice(0, 120) : 'My Voice Life';
+  const body = data.kind === 'reminder' ? reminderTime(data.at, data.tz) : (typeof data.body === 'string' ? data.body.slice(0, 200) : '');
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: data.kind === 'reminder' && data.id ? `reminder-${data.id}` : 'mvl-test',
+    data: { url: '/app/schedule' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/app/schedule', self.location.origin);
+  if (url.origin !== self.location.origin) return; // only ever open our own pages
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of windows) {
+      if (new URL(w.url).origin === self.location.origin && 'focus' in w) { await w.focus(); if ('navigate' in w) await w.navigate(url.href).catch(() => {}); return; }
+    }
+    await self.clients.openWindow(url.href);
+  })());
+});

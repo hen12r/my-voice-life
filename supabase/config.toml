@@ -18,3 +18,10 @@ verify_jwt = false
 
 [functions.ai-connections]
 verify_jwt = true
+
+[functions.push]
+verify_jwt = true
+
+# Called by the database scheduler (pg_cron + pg_net) with the CRON_SECRET header, not by browsers.
+[functions.send-reminders]
+verify_jwt = false
