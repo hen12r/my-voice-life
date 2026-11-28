@@ -55,7 +55,9 @@
 7. App Store Connect → **TestFlight → testeurs internes** : il t'ajoute avec ton adresse Apple.
 8. Sur ton iPhone : installe l'app **TestFlight** (de l'App Store), accepte l'invitation, installe **My Voice Life**. **C'est la vraie app**, sans Safari, Chrome ni Google.
 
-Les versions TestFlight expirent après 90 jours : on en refait une, avec le même bouton.
+**Mises à jour automatiques.** Une fois `IOS_TESTFLIGHT_ENABLED=true` réglé, **chaque modification de l'app** envoie toute seule une nouvelle version sur TestFlight, en 10 à 30 minutes. Sur ton iPhone, TestFlight affiche « Mettre à jour » ; tu peux aussi y activer les mises à jour automatiques. Pour cela, dans App Store Connect → TestFlight → le groupe de testeurs internes, l'adulte active la **distribution automatique**.
+
+Les versions TestFlight expirent après 90 jours, mais une nouvelle version arrive à chaque changement.
 
 ### 2. Publier sur l'App Store (plus tard)
 Apple examine l'app avant de la publier. À faire avant de la soumettre :
@@ -90,7 +92,7 @@ Apple examine l'app avant de la publier. À faire avant de la soumettre :
 3. Create an App Store Connect API key (App Manager role).
 4. Add the GitHub secrets `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_P8` and the variables `APPLE_TEAM_ID`, `IOS_BUNDLE_ID`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `IOS_TESTFLIGHT_ENABLED=true`.
 5. Add `capacitor://localhost` to the `ALLOWED_ORIGINS` function secret.
-6. Run **Actions → iOS → Run workflow** with "testflight" ticked.
+6. Run **Actions → iOS → Run workflow** with "testflight" ticked. From then on, **every app change uploads a new TestFlight build automatically**; enable automatic distribution for the internal testers group so the owner's iPhone simply gets an update.
 7. Add the owner as an internal tester.
 8. The owner installs **TestFlight** from the App Store, then the app.
 

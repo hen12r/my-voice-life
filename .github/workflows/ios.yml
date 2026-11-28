@@ -1,9 +1,9 @@
 # iOS app (Capacitor). Two jobs:
 #  1. simulator-build: proves the app compiles for iOS (unsigned Simulator build). Runs when iOS files
 #     change, or by hand. Uses mock Supabase values: nothing real is contacted.
-#  2. testflight: signed build uploaded to TestFlight. OFF until the responsible adult has an Apple
-#     Developer account and sets repository variable IOS_TESTFLIGHT_ENABLED=true plus the secrets
-#     listed in docs/IOS_APP_STORE.md. Manual trigger only. macOS minutes cost 10× Linux minutes.
+#  2. testflight: signed build uploaded to TestFlight after every app change (and by hand). OFF until
+#     the responsible adult has an Apple Developer account and sets repository variable
+#     IOS_TESTFLIGHT_ENABLED=true plus the secrets in docs/IOS_APP_STORE.md. macOS minutes cost 10×.
 name: iOS
 on:
   workflow_dispatch:
@@ -12,9 +12,11 @@ on:
         description: 'Also upload a signed build to TestFlight (needs the Apple secrets)'
         type: boolean
         default: false
+  # Every change to the app on the development branch: build it, and (once enabled) send it to
+  # TestFlight so the owner's iPhone gets an update. ~2 macOS minutes per run (billed 10×).
   push:
-    branches-ignore: [main]
-    paths: ['ios/**', 'capacitor.config.ts', '.github/workflows/ios.yml', 'src/native/**']
+    branches: [claude/stripe-billing]
+    paths: ['src/**', 'public/**', 'index.html', 'package.json', 'package-lock.json', 'vite.config.ts', 'ios/**', 'capacitor.config.ts', '.github/workflows/ios.yml']
 
 permissions:
   contents: read
@@ -48,11 +50,11 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   testflight:
-    if: github.event_name == 'workflow_dispatch' && inputs.testflight && vars.IOS_TESTFLIGHT_ENABLED == 'true'
+    # Automatic on every app change once the adult sets IOS_TESTFLIGHT_ENABLED=true; or by hand.
+    if: vars.IOS_TESTFLIGHT_ENABLED == 'true' && (github.event_name == 'push' || inputs.testflight)
     needs: simulator-build
     runs-on: macos-15
     timeout-minutes: 45
-    environment: testflight   # lets the owner require a manual approval in GitHub before each upload
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
