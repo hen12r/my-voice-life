@@ -74,4 +74,12 @@ describe('plan limit errors from the database', () => {
     const missing = codes.filter((c) => !translate('en', `errors.${c}` as TranslationKey) || translate('fr', `errors.${c}` as TranslationKey) === translate('en', `errors.${c}` as TranslationKey));
     expect(missing).toEqual([]);
   });
+  it('survives an older backend that sends fewer limit fields (no crash, no false "unlimited")', () => {
+    const t = (k: TranslationKey) => translate('en', k);
+    const old = { ai_captures_per_month: 7, audio_minutes_per_month: 15, max_capture_seconds: 120 } as unknown as PlanCaps;
+    const lines = planFeatures(t, old, 'en');
+    expect(lines).toContain(translate('en', 'plan.f.included').replace('{n}', '7').replace('{m}', '15'));
+    expect(lines).not.toContain(translate('en', 'plan.f.remindersUnlimited'));
+    expect(lines.some((l) => l.includes('undefined') || l.includes('NaN'))).toBe(false);
+  });
 });

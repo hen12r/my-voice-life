@@ -227,8 +227,10 @@ export const startCheckout = (plan: PaidPlan, interval: BillingInterval = 'month
 export const changePlan = (plan: PaidPlan, interval: BillingInterval = 'month') => billingRedirect({ action: 'change_plan', plan, interval });
 export const openBillingPortal = () => billingRedirect({ action: 'portal' });
 export async function getInvoices(): Promise<Invoice[]> {
-  const { invoices } = await callFunction<{ invoices: Invoice[] }>('billing', JSON.stringify({ action: 'invoices' }), true);
-  return invoices;
+  const res = await callFunction<{ invoices?: unknown }>('billing', JSON.stringify({ action: 'invoices' }), true);
+  // An older billing function (still deployed until approved) does not know this action.
+  if (!Array.isArray(res?.invoices)) throw new ApiError('invoices_unavailable', 'Invoice history is not available on this server yet');
+  return res.invoices as Invoice[];
 }
 
 // ---------------- Bring Your Own AI (the user's own OpenAI key). The key is sent once to our

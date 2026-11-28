@@ -13,15 +13,24 @@ export const planNameKey = (p: Plan): TranslationKey => (p === 'pro' ? 'plan.pro
 /** Feature lines for a plan, from its limits. `fmt` replaces {n} and {m}. */
 export function planFeatures(t: (k: TranslationKey) => string, caps: PlanCaps | undefined, locale: string): string[] {
   const n = (v: number) => v.toLocaleString(locale);
+  // A field the server did not send (older backend) is UNKNOWN: its line is left out. Only an
+  // explicit null means "no cap". A missing number must never crash the page or claim "unlimited".
+  const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
   const out = [t('plan.f.notes')];
   if (caps) {
-    out.push(caps.max_active_reminders == null ? t('plan.f.remindersUnlimited') : t('plan.f.reminders').replace('{n}', n(caps.max_active_reminders)));
-    out.push(caps.max_upcoming_events == null ? t('plan.f.eventsUnlimited') : t('plan.f.events').replace('{n}', n(caps.max_upcoming_events)));
+    if (caps.max_active_reminders === null) out.push(t('plan.f.remindersUnlimited'));
+    else if (num(caps.max_active_reminders)) out.push(t('plan.f.reminders').replace('{n}', n(caps.max_active_reminders)));
+    if (caps.max_upcoming_events === null) out.push(t('plan.f.eventsUnlimited'));
+    else if (num(caps.max_upcoming_events)) out.push(t('plan.f.events').replace('{n}', n(caps.max_upcoming_events)));
   }
   out.push(t('plan.f.memory'));
   if (caps) {
-    out.push(t('plan.f.included').replace('{n}', n(caps.ai_captures_per_month)).replace('{m}', n(caps.audio_minutes_per_month)));
-    out.push(t('plan.f.voice').replace('{n}', n(caps.byoai_captures_per_day)).replace('{m}', n(Math.round(caps.byoai_max_capture_seconds / 60 * 10) / 10)));
+    if (num(caps.ai_captures_per_month) && num(caps.audio_minutes_per_month)) {
+      out.push(t('plan.f.included').replace('{n}', n(caps.ai_captures_per_month)).replace('{m}', n(caps.audio_minutes_per_month)));
+    }
+    if (num(caps.byoai_captures_per_day) && num(caps.byoai_max_capture_seconds)) {
+      out.push(t('plan.f.voice').replace('{n}', n(caps.byoai_captures_per_day)).replace('{m}', n(Math.round(caps.byoai_max_capture_seconds / 60 * 10) / 10)));
+    }
   }
   return out;
 }

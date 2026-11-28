@@ -34,7 +34,10 @@ async function mockSupabase(ctx, opts = {}) {
     if (u.includes('/rest/v1/profiles')) return j(((p) => (single ? p : [p]))({ id: 'u1', display_name: 'H', ui_language: 'en', speech_language: 'auto', speech_languages: [], timezone: 'UTC', daily_briefing_enabled: false }));
     if (u.includes('/rpc/mvl_my_usage')) return j({ plan: 'free', is_staff: false, is_admin: false, ai_mode: 'admins_only', ai_available: false, captures_used: 0, captures_limit: 7, minutes_used: 0, minutes_limit: 15, max_capture_seconds: 120, resets_at: new Date().toISOString() });
     if (u.includes('/rest/v1/subscriptions')) return j(single ? null : []);
-    if (u.includes('/functions/v1/billing')) return j({ configured: false, test_mode: false, prices: [], limits: {} });
+    if (u.includes('/functions/v1/billing')) return j(opts.oldBilling
+      // Exactly what the older billing function still deployed on the preview returns (found by the live check).
+      ? { configured: false, test_mode: false, prices: [], limits: { free: { ai_captures_per_month: 7, audio_minutes_per_month: 15, max_capture_seconds: 120 }, premium: { ai_captures_per_month: 300, audio_minutes_per_month: 600, max_capture_seconds: 300 } } }
+      : { configured: false, test_mode: false, prices: [], limits: {} });
     if (u.includes('/functions/v1/push')) return opts.pushLive ? j({ public_key: opts.pushLive }) : j({ error: 'not_found' }, 404);
     if (u.includes('/functions/v1/')) return j({ error: 'not_found' }, 404);
     const table = (u.match(/\/rest\/v1\/([a-z_]+)/) || [])[1];
@@ -112,6 +115,15 @@ const PAGES = ['/app', '/app/notes', '/app/tasks', '/app/schedule', '/app/captur
       const s = await page.evaluate(() => [document.documentElement.dataset.theme, getComputedStyle(document.body).backgroundColor]);
       check('1c light default', s[0] === 'light' && s[1] === 'rgb(246, 246, 250)', s);
       if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'light-1366_app.png'), fullPage: true });
+      await ctx.close();
+    }
+    // 1d. Pricing and Billing with the OLD billing response must not crash (regression from the live check).
+    for (const p of ['/pricing', '/app/billing']) {
+      const ctx = await signedInContext(browser, { oldBilling: true }); const page = await ctx.newPage();
+      const errs = []; page.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+      await page.goto(BASE + p); await page.waitForTimeout(900);
+      const text = await page.locator('body').innerText();
+      check(`1d ${p} with old billing response`, errs.length === 0 && !/undefined|NaN/.test(text), { errs, bad: (text.match(/.{0,30}(undefined|NaN).{0,30}/) || [])[0] });
       await ctx.close();
     }
     // 2. Welcome flow.
