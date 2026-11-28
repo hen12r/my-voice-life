@@ -175,7 +175,7 @@ export default function Capture() {
               <ReviewCard key={idx} index={idx} item={it} categories={categories} error={saveErrors[idx]} blocked={blocked(it)} onChange={(p) => update(idx, p)} />
             ))}
             {items.length > 0 && (
-              <div className="sticky bottom-20 flex items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 shadow-sm backdrop-blur lg:bottom-4">
+              <div className="sticky bottom-20 flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface/95 p-3 shadow-sm backdrop-blur lg:bottom-4">
                 <span className="text-sm text-muted" aria-live="polite">{t('capture.keeping')} {selected.length} / {items.length}</span>
                 <Button onClick={save} disabled={!canSave} loading={phase === 'saving'} icon={<Check className="size-4" />}>{t('capture.saveSelected')}</Button>
               </div>
@@ -195,7 +195,7 @@ export default function Capture() {
       <PageHeader title={t('capture.title')} subtitle={t('capture.subtitle')} />
       {usage && access?.mode === 'platform' && <AllowanceBar usage={usage} />}
       {access?.mode === 'byoai' && (
-        <div className="mb-4 rounded-xl bg-white px-4 py-2.5 text-xs text-muted shadow-sm">
+        <div className="mb-4 rounded-xl bg-surface px-4 py-2.5 text-xs text-muted shadow-sm">
           {t('usage.byoaiToday').replace('{n}', String(access.usedToday)).replace('{m}', String(access.perDay))}
         </div>
       )}
@@ -362,7 +362,7 @@ function AllowanceBar({ usage }: { usage: import('../lib/types').MyUsage }) {
   const minutesLeft = Math.max(0, Math.floor((usage.minutes_limit - usage.minutes_used) * 10) / 10);
   const pct = Math.min(100, (usage.captures_used / usage.captures_limit) * 100);
   return (
-    <div className="mb-4 rounded-2xl border border-line bg-white px-4 py-3 text-sm" aria-live="polite">
+    <div className="mb-4 rounded-2xl border border-line bg-surface px-4 py-3 text-sm" aria-live="polite">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span><strong className="tabular-nums">{capturesLeft}</strong> / {usage.captures_limit} {t('usage.capturesLeft')}</span>
         <span className="text-xs text-muted">

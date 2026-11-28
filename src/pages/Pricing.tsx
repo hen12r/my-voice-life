@@ -61,7 +61,7 @@ export default function Pricing() {
       </header>
 
       <main className="mx-auto -mt-16 max-w-6xl space-y-4 px-4 pb-16 sm:px-5">
-        <div role="note" className="flex gap-3 rounded-2xl border border-accent-100 bg-white p-4 text-sm text-ink shadow-sm">
+        <div role="note" className="flex gap-3 rounded-2xl border border-accent-100 bg-surface p-4 text-sm text-ink shadow-sm">
           <Info className="mt-0.5 size-5 shrink-0 text-accent-600" aria-hidden />
           <div>
             <p className="font-semibold">{t('pricing.byoaiTitle')}</p>
@@ -75,10 +75,10 @@ export default function Pricing() {
 
         {hasYearly && (
           <div className="flex justify-center">
-            <div role="radiogroup" aria-label={t('pricing.title')} className="inline-flex rounded-xl bg-white p-1 text-sm shadow-sm ring-1 ring-line">
+            <div role="radiogroup" aria-label={t('pricing.title')} className="inline-flex rounded-xl bg-surface p-1 text-sm shadow-sm ring-1 ring-line">
               {(['month', 'year'] as const).map((i) => (
                 <button key={i} type="button" role="radio" aria-checked={interval === i} onClick={() => setInterval(i)}
-                  className={cx('rounded-lg px-4 py-1.5 font-medium transition-colors', interval === i ? 'bg-navy-900 text-white' : 'text-muted hover:text-ink')}>
+                  className={cx('rounded-lg px-4 py-1.5 font-medium transition-colors', interval === i ? 'bg-navy-900 text-white dark:bg-accent-600' : 'text-muted hover:text-ink')}>
                   {t(i === 'month' ? 'pricing.monthly' : 'pricing.yearly')}
                 </button>
               ))}

@@ -50,7 +50,7 @@ export default function Tasks() {
       <div className="mb-4 flex gap-2" role="tablist">
         {(['open', 'done'] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-            className={cx('rounded-full px-3 py-1.5 text-sm', tab === k ? 'bg-navy-900 text-white' : 'border border-line bg-white text-muted hover:text-ink')}>
+            className={cx('rounded-full px-3 py-1.5 text-sm', tab === k ? 'bg-navy-900 text-white dark:bg-accent-600' : 'border border-line bg-surface text-muted hover:text-ink')}>
             {t(k === 'open' ? 'tasks.open' : 'tasks.done')} {tasks && <span className="opacity-60">· {tasks.filter((x) => x.status === k).length}</span>}
           </button>
         ))}

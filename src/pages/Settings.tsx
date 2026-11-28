@@ -7,6 +7,7 @@ import { createCategory, deleteAccount, deleteCategory, getSubscription, updateP
 import { planNameKey } from '../lib/plans';
 import { AiProviderCard } from '../components/AiProviderCard';
 import { InstallCard } from '../pwa/InstallCard';
+import { AppearanceCard } from '../components/AppearanceCard';
 import { useCategories } from '../lib/useCategories';
 import type { Profile, Subscription, UiLanguage } from '../lib/types';
 import { getLanguage, interfaceLanguages, LANGUAGES, MAX_SPEECH_LANGUAGES, sanitizeSpeechLanguages } from '../../supabase/functions/_shared/languages.ts';
@@ -99,7 +100,7 @@ export default function Settings() {
                   {spoken.map((code) => {
                     const l = getLanguage(code)!;
                     return (
-                      <li key={code} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
+                      <li key={code} className="flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pr-1.5 pl-3 text-sm">
                         <span dir={l.direction}>{l.nativeName}</span>
                         <Badge tone={l.voice === 'verified' ? 'ok' : 'warn'}>{t(`settings.voice.${l.voice}`)}</Badge>
                         <button type="button" onClick={() => setSpoken(spoken.filter((c) => c !== code))} className="-m-1 rounded-full p-1.5 text-muted hover:bg-canvas hover:text-red-600"
@@ -136,7 +137,7 @@ export default function Settings() {
         <div className="px-5 pb-5">
           <ul className="mb-4 flex flex-wrap gap-2">
             {categories.map((c) => (
-              <li key={c.id} className="flex items-center gap-1.5 rounded-full border border-line bg-white py-1 pr-1.5 pl-3 text-sm">
+              <li key={c.id} className="flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pr-1.5 pl-3 text-sm">
                 <span className="size-2 rounded-full" style={{ background: c.color ?? '#8b6cff' }} aria-hidden />{c.name}
                 <button onClick={() => removeCategory(c.id)} className="-m-1 rounded-full p-1.5 text-muted hover:bg-canvas hover:text-red-600" aria-label={`${t('common.delete')} ${c.name}`}><X className="size-3.5" /></button>
               </li>
@@ -149,6 +150,8 @@ export default function Settings() {
           {catError && <div className="mt-3"><Alert>{catError}</Alert></div>}
         </div>
       </Card>
+
+      <AppearanceCard />
 
       <AiProviderCard />
 

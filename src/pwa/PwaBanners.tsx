@@ -14,7 +14,7 @@ export function PwaBanners() {
         </div>
       )}
       {updateReady && (
-        <div role="status" className="pointer-events-auto flex items-center gap-3 rounded-xl bg-white px-4 py-2 text-sm text-ink shadow-lg ring-1 ring-line">
+        <div role="status" className="pointer-events-auto flex items-center gap-3 rounded-xl bg-surface px-4 py-2 text-sm text-ink shadow-lg ring-1 ring-line">
           <span>{t('pwa.updateReady')}</span>
           <button type="button" onClick={applyUpdate} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600 px-3 py-1.5 font-medium text-white hover:bg-accent-700">
             <RefreshCw className="size-3.5" aria-hidden />{t('pwa.reload')}

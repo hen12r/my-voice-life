@@ -14,8 +14,8 @@
 const BUILD = '__MVL_BUILD__';
 const STATIC_CACHE = `mvl-static-${BUILD}`;
 const OFFLINE_URL = '/offline.html';
-const PRECACHE = [OFFLINE_URL, '/icon.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
-const PUBLIC_FILE = /^\/(icon[\w.-]*\.(png|svg)|apple-touch-icon\.png|manifest\.webmanifest|offline\.html|screenshots\/[\w.-]+\.png)$/;
+const PRECACHE = [OFFLINE_URL, '/theme.js', '/icon.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
+const PUBLIC_FILE = /^\/(icon[\w.-]*\.(png|svg)|apple-touch-icon\.png|manifest\.webmanifest|offline\.html|theme\.js|screenshots\/[\w.-]+\.png)$/;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(STATIC_CACHE).then((c) => c.addAll(PRECACHE.map((u) => new Request(u, { cache: 'reload' })))));

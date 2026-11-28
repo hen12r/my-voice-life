@@ -38,7 +38,7 @@ export default function Notes() {
       <div className="mb-4 flex flex-wrap gap-2" role="tablist">
         {(['all', ...KINDS] as const).map((k) => (
           <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)}
-            className={cx('rounded-full px-3 py-1.5 text-sm', filter === k ? 'bg-navy-900 text-white' : 'bg-white text-muted border border-line hover:text-ink')}>
+            className={cx('rounded-full px-3 py-1.5 text-sm', filter === k ? 'bg-navy-900 text-white dark:bg-accent-600' : 'bg-surface text-muted border border-line hover:text-ink')}>
             {k === 'all' ? t('notes.filterAll') : t(`type.${k}` as TranslationKey)}
           </button>
         ))}
