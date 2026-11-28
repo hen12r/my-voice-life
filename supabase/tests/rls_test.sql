@@ -109,6 +109,16 @@ update public.tasks set status = 'open';
 select pg_temp.expect((select completed_at is null from public.tasks), 'completed_at cleared when reopened');
 reset role;
 
+-- ---------- Push devices (migration 7): owner-only, no direct writes ----------
+select pg_temp.as_user('aaaaaaaa-0000-0000-0000-000000000001');
+select public.mvl_push_subscribe('https://fcm.googleapis.com/fcm/send/rls-a', repeat('B', 87), repeat('A', 22));
+select pg_temp.expect((select count(*) = 1 from public.mvl_push_subscriptions), 'A sees A''s push device');
+reset role;
+select pg_temp.as_user('bbbbbbbb-0000-0000-0000-000000000002');
+select pg_temp.expect((select count(*) = 0 from public.mvl_push_subscriptions), 'B cannot see A''s push devices');
+select pg_temp.expect_error($$delete from public.mvl_push_subscriptions$$, 'B cannot delete push devices directly');
+reset role;
+
 -- ---------- Account deletion cascades ----------
 delete from auth.users where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 select pg_temp.expect((select count(*) = 0 from public.notes where user_id = 'aaaaaaaa-0000-0000-0000-000000000001'), 'deleting user removes all their data');

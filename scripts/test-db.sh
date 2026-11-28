@@ -31,6 +31,27 @@ run_test mvl_test supabase/tests/billing_test.sql
 
 run_test mvl_test supabase/tests/plans_byoai_test.sql
 
+run_test mvl_test supabase/tests/push_test.sql
+
+echo "== Scenario: rollback of migration 7 (push), round trip"
+reset_db mvl_test
+migrate mvl_test
+R="psql -v ON_ERROR_STOP=1 -qtA -d mvl_test"
+$R -c "insert into auth.users (id, email) values ('55555555-0000-0000-0000-000000000001','rb7@test')" \
+   -c "insert into public.reminders (user_id, title, remind_at, timezone, last_notified_at) values ('55555555-0000-0000-0000-000000000001','keep me',now(),'UTC',now())" \
+   -c "insert into public.mvl_push_subscriptions (user_id, endpoint, p256dh, auth) values ('55555555-0000-0000-0000-000000000001','https://fcm.googleapis.com/fcm/send/rb7',repeat('B',87),repeat('A',22))" >/dev/null
+PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f supabase/rollback/rollback_20261128_migration_7_push.sql
+CHECK=$($R -c "select to_regclass('public.mvl_push_subscriptions') is null
+  and to_regprocedure('public.mvl_push_claim_due(integer)') is null
+  and to_regprocedure('public.mvl_push_subscribe(text,text,text,text)') is null
+  and (select count(*) = 1 from public.reminders where title = 'keep me' and last_notified_at is not null)")
+[ "$CHECK" = t ] || { echo "FAIL  rollback 7 did not remove push objects or touched reminders"; exit 1; }
+echo "PASS  rollback 7 removes the push table and functions, and keeps reminders intact"
+PGOPTIONS="$QUIET" psql -v ON_ERROR_STOP=1 -q --single-transaction -d mvl_test -f supabase/migrations/20261128000001_mvl_push.sql
+[ "$($R -c "select to_regclass('public.mvl_push_subscriptions') is not null")" = t ] || { echo "FAIL  re-apply after rollback 7"; exit 1; }
+echo "PASS  migration 7 re-applies cleanly after a rollback"
+echo "ALL PUSH ROLLBACK TESTS PASSED"
+
 echo "== Scenario: rollback of migrations 3-4 (round trip, and refusals that protect data)"
 reset_db mvl_test
 migrate mvl_test
@@ -191,6 +212,18 @@ wait
 [ "$($Q2 -c "select count(*) from public.reminders where user_id = '99999999-0000-0000-0000-000000000002'")" = 1 ] && grep -q PLAN_LIMIT_REMINDERS /tmp/mvl_race_b \
   && echo "PASS  two simultaneous reminders for the last free slot: exactly one is saved" \
   || { echo "FAIL  caps race: B=$(cat /tmp/mvl_race_b)"; exit 1; }
+# Push race: two senders claim at the same time; every due reminder is claimed exactly once.
+$Q2 -c "insert into public.mvl_push_subscriptions (user_id, endpoint, p256dh, auth) values ('99999999-0000-0000-0000-000000000002','https://fcm.googleapis.com/fcm/send/race',repeat('B',87),repeat('A',22))" \
+    -c "update public.mvl_plan_limits set max_active_reminders = null where plan = 'free'" \
+    -c "insert into public.reminders (user_id, title, remind_at, timezone) select '99999999-0000-0000-0000-000000000002', 'due ' || g, now() - interval '1 minute', 'UTC' from generate_series(1, 40) g" >/dev/null
+$Q2 -c "begin" -c "select count(*) from public.mvl_push_claim_due(25)" -c "select pg_sleep(2)" -c "commit" > /tmp/mvl_race_a &
+sleep 0.5
+$Q2 -c "select count(*) from public.mvl_push_claim_due(1000)" > /tmp/mvl_race_b
+wait
+A=$(grep -E '^[0-9]+$' /tmp/mvl_race_a | head -1); B=$(cat /tmp/mvl_race_b)
+[ "$((A + B))" = 40 ] && [ "$A" = 25 ] && [ "$($Q2 -c "select count(*) from public.mvl_push_claim_due(1000)")" = 0 ] \
+  && echo "PASS  two simultaneous senders: each of 40 due reminders claimed exactly once ($A + $B)" \
+  || { echo "FAIL  push race: A=$A B=$B"; exit 1; }
 echo "ALL CONCURRENCY TESTS PASSED"
 
 echo "== Scenario: legacy FitPick project"
