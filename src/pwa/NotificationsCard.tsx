@@ -4,6 +4,9 @@ import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
 import { getPushPublicKey, sendTestPush } from '../lib/api';
 import { currentSubscription, detectPushSupport, disablePush, enablePush, PushPermissionError, type PushSupport } from './push';
 import { Alert, Button, Card, CardHeader } from '../components/ui';
+import { isNativeApp } from '../native/platform';
+import { nativePermission, requestNativePermission, scheduleNativeTest } from '../native/reminders';
+import { resyncNativeReminders } from '../native/sync';
 
 type State = 'loading' | 'unavailable' | Exclude<PushSupport, 'ok'> | 'off' | 'on';
 const INFO: Partial<Record<State, TranslationKey>> = {
@@ -12,6 +15,42 @@ const INFO: Partial<Record<State, TranslationKey>> = {
 
 // Settings → "Reminder notifications". Every state is real: no button is shown unless it can work.
 export function NotificationsCard() {
+  return isNativeApp() ? <NativeNotificationsCard /> : <WebNotificationsCard />;
+}
+
+// iOS app: alerts scheduled on the device (src/native/reminders.ts). Permission only on a tap.
+function NativeNotificationsCard() {
+  const { t } = useI18n();
+  const [perm, setPerm] = useState<'loading' | 'granted' | 'denied' | 'prompt'>('loading');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  useEffect(() => { nativePermission().then(setPerm).catch(() => setPerm('prompt')); }, []);
+  const act = async (fn: () => Promise<void>) => { setBusy(true); setMsg(null); try { await fn(); } catch (e) { setMsg({ kind: 'error', text: errorMessage(t, e) }); } finally { setBusy(false); } };
+  return (
+    <Card>
+      <CardHeader title={t('push.title')} icon={<Bell className="size-4 text-accent-600" />} />
+      <div className="space-y-3 px-5 pb-5 text-sm">
+        <p className="text-muted">{t('push.intro')}</p>
+        {perm === 'denied' && <Alert kind="info">{t('push.nativeDenied')}</Alert>}
+        {perm === 'granted' && <Alert kind="success">{t('push.nativeOn')}</Alert>}
+        {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+        {perm === 'prompt' && (
+          <Button loading={busy} icon={<Bell className="size-4" />} onClick={() => act(async () => {
+            const p = await requestNativePermission(); setPerm(p); if (p === 'granted') await resyncNativeReminders();
+          })}>{t('push.enable')}</Button>
+        )}
+        {perm === 'granted' && (
+          <Button variant="secondary" loading={busy} icon={<Send className="size-4" />} onClick={() => act(async () => {
+            await scheduleNativeTest(t('push.title'), t('push.testBody')); setMsg({ kind: 'success', text: t('push.testSent') });
+          })}>{t('push.test')}</Button>
+        )}
+        <p className="text-xs text-muted">{t('push.nativePrivacy')}</p>
+      </div>
+    </Card>
+  );
+}
+
+function WebNotificationsCard() {
   const { t } = useI18n();
   const [state, setState] = useState<State>('loading');
   const [key, setKey] = useState<string | null>(null);

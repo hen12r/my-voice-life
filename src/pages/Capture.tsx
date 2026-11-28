@@ -4,6 +4,7 @@ import { AlertTriangle, Bell, CalendarDays, Check, CheckSquare, Heart, Keyboard,
 import { useAuth } from '../auth/AuthProvider';
 import { voiceAccess } from '../lib/plans';
 import { errorMessage, useI18n, type TranslationKey } from '../lib/i18n';
+import { resyncNativeReminders } from '../native/sync';
 import { commitItems, createNote, DEFAULT_REMINDER_TIME, listCategories, processAudio, processText, type ProcessResult, type ReviewedItem } from '../lib/api';
 import { ITEM_TYPES, type ItemType } from '../../supabase/functions/_shared/extraction.ts';
 import { getLanguage, isKnownLanguage, languageLabel } from '../../supabase/functions/_shared/languages.ts';
@@ -106,6 +107,7 @@ export default function Capture() {
     if (!result) return;
     setPhase('saving');
     const outcomes = await commitItems(items, { timezone, sessionId: result.session_id, language: result.language, categories });
+    void resyncNativeReminders(); // iOS app: new reminders get their device alert
     const errs: Record<number, string> = {};
     outcomes.filter((o) => !o.ok).forEach((o) => { errs[o.index] = errorMessage(t, o.error); });
     const ok = outcomes.filter((o) => o.ok).length;

@@ -9,6 +9,7 @@ import { AiProviderCard } from '../components/AiProviderCard';
 import { InstallCard } from '../pwa/InstallCard';
 import { AppearanceCard } from '../components/AppearanceCard';
 import { setOnboarded } from '../lib/onboarding';
+import { isNativeApp } from '../native/platform';
 import { ExportCard } from '../components/ExportCard';
 import { NotificationsCard } from '../pwa/NotificationsCard';
 import { useCategories } from '../lib/useCategories';
@@ -179,7 +180,7 @@ export default function Settings() {
           )}
           <div className="flex flex-col gap-2 pt-1 sm:flex-row">
             <Link to="/app/billing"><Button variant="secondary" className="w-full" icon={<CreditCard className="size-4" />}>{t('settings.billingLink')}</Button></Link>
-            {!paid && !paymentProblem && <Link to="/pricing"><Button className="w-full" icon={<Sparkles className="size-4" />}>{t('settings.upgrade')}</Button></Link>}
+            {!paid && !paymentProblem && !isNativeApp() && <Link to="/pricing"><Button className="w-full" icon={<Sparkles className="size-4" />}>{t('settings.upgrade')}</Button></Link>}
           </div>
         </div>
       </Card>

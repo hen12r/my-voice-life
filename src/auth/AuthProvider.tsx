@@ -1,3 +1,5 @@
+import { resyncNativeReminders } from '../native/sync';
+import { clearNativeReminders } from '../native/reminders';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -64,14 +66,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
       setSession(data.session);
-      if (data.session) await loadProfile();
+      if (data.session) { await loadProfile(); void resyncNativeReminders(); }
       setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       if (event === 'PASSWORD_RECOVERY') setRecovering(true);
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') void loadProfile();
-      if (event === 'SIGNED_OUT') { setProfile(null); setRecovering(false); setUsage(null); }
+      if (event === 'SIGNED_IN') void resyncNativeReminders();
+      if (event === 'SIGNED_OUT') { setProfile(null); setRecovering(false); setUsage(null); void clearNativeReminders(); }
     });
     return () => { active = false; sub.subscription.unsubscribe(); };
   }, [loadProfile]);

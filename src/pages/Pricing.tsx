@@ -1,3 +1,4 @@
+import { isNativeApp } from '../native/platform';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ArrowLeft, Check, Info, Lock, Sparkles } from 'lucide-react';
@@ -18,6 +19,7 @@ export function hasLiveSubscription(sub: Subscription | null): boolean {
 
 export default function Pricing() {
   const { t, locale } = useI18n();
+  const native = isNativeApp();
   const { session, usage } = useAuth();
   const [params] = useSearchParams();
   const [info, setInfo] = useState<BillingInfo | null>(null);
@@ -70,7 +72,7 @@ export default function Pricing() {
         </div>
         {params.get('checkout') === 'cancelled' && <Alert kind="info">{t('pricing.cancelled')}</Alert>}
         {info?.test_mode && <Alert kind="info">{t('pricing.testMode')}</Alert>}
-        {info && !info.configured && <Alert kind="info">{t('pricing.notAvailable')}</Alert>}
+        {native ? <Alert kind="info">{t('billing.nativeNoPurchase')}</Alert> : info && !info.configured && <Alert kind="info">{t('pricing.notAvailable')}</Alert>}
         {error && <Alert>{error}</Alert>}
 
         {hasYearly && (
@@ -112,11 +114,12 @@ export default function Pricing() {
                       <li key={f} className="flex gap-2.5"><Check className="mt-0.5 size-4 shrink-0 text-accent-600" aria-hidden />{f}</li>
                     ))}
                   </ul>
-                  <div className="mt-6 space-y-2">
+                  {/* iOS app: Apple forbids selling digital subscriptions outside In-App Purchase (3.1.1). */}
+                  {!native && <div className="mt-6 space-y-2">
                     <PlanAction plan={plan} signedIn={!!session} current={current} live={live} hasPrice={!!price}
                       interval={interval} currentInterval={currentInterval} busy={busy === plan} disabled={busy !== null}
                       onCheckout={(p) => go(p, () => startCheckout(p, interval))} onChange={(p) => go(p, () => changePlan(p, interval))} />
-                  </div>
+                  </div>}
                 </Card>
               );
             })}

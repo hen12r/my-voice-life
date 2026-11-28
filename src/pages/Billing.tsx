@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isNativeApp } from '../native/platform';
 import { Link, useSearchParams } from 'react-router';
 import { Check, CreditCard, ExternalLink, Receipt, Sparkles } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
@@ -33,6 +34,7 @@ export default function Billing() {
   }, []);
 
   const plan = usage?.plan ?? 'free';
+  const native = isNativeApp(); // iOS app: no purchase or plan-change buttons (Apple 3.1.1)
   const live = hasLiveSubscription(sub ?? null);
   const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(locale, { dateStyle: 'long' }) : null);
   const periodEnd = date(sub?.current_period_end);
@@ -74,7 +76,8 @@ export default function Billing() {
               <li key={f} className="flex gap-2.5"><Check className="mt-0.5 size-4 shrink-0 text-accent-600" aria-hidden />{f}</li>
             ))}
           </ul>
-          <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
+          {native && <Alert kind="info">{t('billing.nativeNoPurchase')}</Alert>}
+          {!native && <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
             {plan === 'free' && <Link to="/pricing"><Button className="w-full" icon={<Sparkles className="size-4" />}>{t('billing.seePlans')}</Button></Link>}
             {live && other && otherPrice && (
               <Button variant={other === 'pro' ? 'primary' : 'secondary'} loading={busy === 'change'} disabled={busy !== null} onClick={() => go('change', () => changePlan(other, curInterval))}>
@@ -93,8 +96,8 @@ export default function Billing() {
                 {t(live ? 'billing.manageOrCancel' : 'pricing.manage')}
               </Button>
             )}
-          </div>
-          {live && <p className="text-xs text-muted">{t('billing.portalNote')}</p>}
+          </div>}
+          {live && !native && <p className="text-xs text-muted">{t('billing.portalNote')}</p>}
         </div>
       </Card>
 

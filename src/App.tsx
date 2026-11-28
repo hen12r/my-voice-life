@@ -20,6 +20,7 @@ import BillingSuccess from './pages/BillingSuccess';
 import Billing from './pages/Billing';
 import Welcome from './pages/Welcome';
 import { PwaBanners } from './pwa/PwaBanners';
+import { isNativeApp } from './native/platform';
 import { PrivacyPolicy, TermsOfService } from './pages/Legal';
 import type { UiLanguage } from './lib/types';
 import { effectiveUiLanguage, hasTranslation } from './lib/i18n';
@@ -74,7 +75,8 @@ export default function App() {
         <BrowserRouter>
           <PwaBanners />
           <Routes>
-            <Route path="/" element={<Landing />} />
+            {/* The iOS app opens straight into the app (sign-in first if needed), not the marketing page. */}
+            <Route path="/" element={isNativeApp() ? <Navigate to="/app" replace /> : <Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

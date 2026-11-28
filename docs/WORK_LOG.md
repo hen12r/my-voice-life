@@ -216,3 +216,16 @@ See `docs/ROADMAP.md` (status table with evidence) and the PR #1 description.
 
   `test:ui` is a new real-Chromium suite. It is not run in CI, because CI has no browser; run it locally.
 - **Live:** nothing deployed, migrated, enabled or merged.
+
+## 2026-11-28 — iPhone app (Capacitor), on the road to TestFlight / App Store
+- **Real iOS project in `ios/`.** Capacitor 8, Swift Package Manager, bundled app files. It has the My Voice Life icon and splash, a microphone purpose string and a privacy manifest.
+- **Reminders alert on the iPhone through on-device notifications** (`src/native/reminders.ts`).
+  - No server and no Google.
+  - Rescheduled on every change, cleared on sign-out.
+  - At most 60 pending, under iOS's limit of 64.
+- **No purchase UI in the iOS app** (Apple 3.1.1). The app opens on the app itself, not the marketing page.
+- **`.github/workflows/ios.yml`:**
+  - an unsigned Simulator build on GitHub macOS runners, which proves it compiles;
+  - a TestFlight upload job, disabled until the adult enrols with Apple and adds the secrets (`docs/IOS_APP_STORE.md`).
+- **Not done:** no `.ipa`, no TestFlight build, no App Store listing. These need the adult's Apple Developer account.
+- **Tests:** typecheck 0, Vitest 196 (with the native schedule mapping), `test:pwa` and `test:ui` pass. Web behaviour is unchanged: the native code paths only run inside the iOS app.
